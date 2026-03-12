@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { MBTI_QUESTIONS, MBTI_TYPE_INFO } from "./mbti-data";
 import type { MBTIQuestion } from "./mbti-data";
 import { computeMBTI, computeMBTIScores, type AnswerRecord } from "./mbti-score";
@@ -11,10 +11,11 @@ export default function App() {
   const [step, setStep] = useState<Step>("intro");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerRecord>({});
+  const [hasSavedResult, setHasSavedResult] = useState(false);
 
   const currentQuestion: MBTIQuestion | undefined = MBTI_QUESTIONS[currentIndex];
-  const progress = totalQuestions > 0 ? ((currentIndex + 1) / totalQuestions) * 100 : 0;
   const answeredCount = Object.keys(answers).length;
+  const progress = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
   const handleAnswer = useCallback((rating: number) => {
     if (!currentQuestion) return;
@@ -38,35 +39,49 @@ export default function App() {
     setStep("quiz");
     setCurrentIndex(0);
     setAnswers({});
+    setHasSavedResult(false);
   }, []);
 
   const handleRetry = useCallback(() => {
     setStep("intro");
     setCurrentIndex(0);
     setAnswers({});
+    setHasSavedResult(false);
   }, []);
 
   const resultType = step === "result" ? computeMBTI(answers) : null;
   const resultInfo = resultType ? MBTI_TYPE_INFO[resultType] : null;
 
-  // Chuẩn hóa dữ liệu kết quả dưới dạng JSON string (gửi MongoDB)
-  const resultJson =
-    step === "result" && resultType
-      ? JSON.stringify(
-          {
-            mbtiType: resultType,
-            scores: computeMBTIScores(answers),
-            answers,
-            meta: {
-              totalQuestions,
-              answeredCount,
-              completedAt: new Date().toISOString(),
-            },
-          },
-          null,
-          2
-        )
-      : null;
+  useEffect(() => {
+    if (step !== "result" || !resultType || hasSavedResult) return;
+
+    const payload = {
+      mbtiType: resultType,
+      scores: computeMBTIScores(answers),
+      answers,
+      meta: {
+        totalQuestions,
+        answeredCount,
+        completedAt: new Date().toISOString(),
+      },
+    };
+
+    fetch("http://localhost:4000/api/mbti-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Save failed");
+        return res.json();
+      })
+      .then(() => {
+        setHasSavedResult(true);
+      })
+      .catch((err) => {
+        console.error("Lưu kết quả MBTI thất bại:", err);
+      });
+  }, [step, resultType, answers, hasSavedResult, answeredCount]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800">
@@ -101,7 +116,7 @@ export default function App() {
         )}
 
         {step === "result" && resultInfo && (
-          <Result info={resultInfo} json={resultJson} onRetry={handleRetry} />
+          <Result info={resultInfo} saved={hasSavedResult} onRetry={handleRetry} />
         )}
       </main>
 
@@ -224,11 +239,11 @@ function Quiz({
 
 function Result({
   info: { type, nameVi, shortDesc, careers, neuMajors, traits },
-  json,
+  saved,
   onRetry,
 }: {
   info: import("./mbti-data").MBTITypeInfo;
-  json: string | null;
+  saved: boolean;
   onRetry: () => void;
 }) {
   return (
@@ -251,6 +266,11 @@ function Result({
             </span>
           ))}
         </div>
+        {saved && (
+          <p className="mt-3 text-xs text-emerald-600">
+            Kết quả đã được lưu vào hệ thống.
+          </p>
+        )}
       </div>
 
       <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
@@ -273,15 +293,6 @@ function Result({
           ))}
         </ul>
       </div>
-
-      {json && (
-        <div className="rounded-2xl bg-slate-900 p-4 text-xs text-slate-100 font-mono overflow-x-auto">
-          <p className="mb-2 font-semibold text-slate-200">
-            JSON kết quả (gửi MongoDB):
-          </p>
-          <pre>{json}</pre>
-        </div>
-      )}
 
       <button
         type="button"
