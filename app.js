@@ -58,11 +58,24 @@ function streamToBuffer(stream) {
 const SECTION_DEFS = [
   { key: "ten_tinh_cach", labels: ["TÊN TÍNH CÁCH", "TEN TINH CACH"] },
   { key: "khai_niem", labels: ["KHÁI NIỆM", "KHAI NIEM"] },
-  { key: "phan_tich_cac_chieu_tinh_cach", labels: ["PHÂN TÍCH CÁC CHIỀU TÍNH CÁCH", "PHAN TICH CAC CHIEU TINH CACH"] },
+  {
+    key: "phan_tich_cac_chieu_tinh_cach",
+    labels: [
+      "PHÂN TÍCH CÁC CHIỀU TÍNH CÁCH", "PHAN TICH CAC CHIEU TINH CACH",
+      "CẤU TRÚC TÍNH CÁCH", "CAU TRUC TINH CACH",
+      "Ý NGHĨA CÁC CHIỀU TÍNH CÁCH", "Y NGHIA CAC CHIEU TINH CACH",
+    ],
+  },
   { key: "diem_manh", labels: ["ĐIỂM MẠNH", "DIEM MANH"] },
-  { key: "diem_yeu", labels: ["ĐIỂM YẾU", "DIEM YEU"] },
+  { key: "diem_yeu", labels: ["ĐIỂM YẾU", "DIEM YEU", "HẠN CHẾ", "HAN CHE"] },
   { key: "moi_truong", labels: ["MÔI TRƯỜNG", "MOI TRUONG"] },
-  { key: "nganh_nghe_tuong_ung", labels: ["NGÀNH, NGHỀ TƯƠNG ỨNG", "NGANH, NGHE TUONG UNG"] },
+  {
+    key: "nganh_nghe_tuong_ung",
+    labels: [
+      "NGÀNH, NGHỀ TƯƠNG ỨNG", "NGANH, NGHE TUONG UNG",
+      "DANH MỤC NGÀNH VÀ NGHỀ NGHIỆP TƯƠNG ỨNG", "DANH MUC NGANH VA NGHE NGHIEP TUONG UNG",
+    ],
+  },
 ];
 
 const LABEL_TO_KEY = (() => {
@@ -130,13 +143,113 @@ function extractSectionsByHeadings(text) {
   return sections;
 }
 
+/**
+ * Strip leading bullets/numbering from a single line.
+ * Removes patterns like: 1. / 1) / (1) / - / • / 6.1.2.3
+ */
+function stripLeadingNumber(line) {
+  return line
+    .replace(/^\s*(\d+\.)+\d*\s+/g, "")
+    .replace(/^\s*\d+[\.)\]\s]+/g, "")
+    .replace(/^\s*\(\d+\)\s+/g, "")
+    .replace(/^\s*[IVXLCDM]+\.\s+/gi, "")
+    .replace(/^\s*[-–•]\s+/g, "");
+}
+
+/**
+ * Clean generic section text: remove leading numbers/bullets from every line,
+ * collapse multiple blank lines, trim.
+ */
+function cleanSectionText(text) {
+  if (!text) return text;
+  return text
+    .split("\n")
+    .map(stripLeadingNumber)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Parse the raw nganh_nghe_tuong_ung block into a clean formatted string.
+ */
+function cleanNganhNghe(text) {
+  if (!text) return text;
+
+  // Each line in the source doc typically reads:
+  // "6.2.3.1 Tên ngành (MãNgành) Nghề nghiệp tương ứng: Nghề1, Nghề2, ..."
+  // We split on the "Nghề nghiệp tương ứng" separator to isolate each part.
+  const ngheHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
+  const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
+
+  const nganhSet = new Map(); // code -> name, insertion-ordered
+  const ngheSet = new Set();  // deduplicated jobs
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const splitIdx = line.search(ngheHeaderRe);
+    if (splitIdx > -1) {
+      // ── Extract ngành ──
+      const nganhPart = line.slice(0, splitIdx).trim();
+      const codeMatch = nganhPart.match(codeRe);
+      if (codeMatch) {
+        const code = codeMatch[1];
+        // Name = everything before the (code), stripped of leading numbering and "Ngành" prefix
+        const name = nganhPart
+          .replace(codeRe, "")
+          .replace(/^[\s\d\.]+/, "")
+          .replace(/^Ng[àa]nh\s+/i, "")
+          .trim();
+        if (name && !nganhSet.has(code)) nganhSet.set(code, name);
+      }
+
+      // ── Extract nghề ──
+      const ngheHeaderMatch = line.match(ngheHeaderRe);
+      const jobsPart = line.slice(splitIdx + (ngheHeaderMatch ? ngheHeaderMatch[0].length : 0)).trim();
+      for (const job of jobsPart.split(/[,;]/)) {
+        const j = job.replace(/\.?$/, "").trim();
+        if (j) ngheSet.add(j);
+      }
+    }
+  }
+
+  const parts = [];
+
+  if (nganhSet.size) {
+    parts.push("Ngành tại NEU");
+    for (const [code, name] of nganhSet) {
+      parts.push(`${name} (${code})`);
+    }
+  }
+
+  if (ngheSet.size) {
+    parts.push("");
+    parts.push("Nghề nghiệp tương ứng");
+    for (const job of ngheSet) {
+      parts.push(job);
+    }
+  }
+
+  parts.push("");
+  parts.push("Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.");
+
+  return parts.join("\n").trim();
+}
+
 function normalizeSections(sections) {
   if (!sections || typeof sections !== "object") return null;
   const normalized = {};
   for (const def of SECTION_DEFS) {
     const value = sections[def.key];
     if (typeof value === "string" && value.trim()) {
-      normalized[def.key] = value.trim();
+      if (def.key === "nganh_nghe_tuong_ung") {
+        const cleaned = cleanNganhNghe(value);
+        if (cleaned) normalized[def.key] = cleaned;
+      } else {
+        normalized[def.key] = cleanSectionText(value);
+      }
     }
   }
   return Object.keys(normalized).length ? normalized : null;
@@ -177,13 +290,19 @@ async function extractSectionsWithAI(text, mbtiType) {
             "**moi_truong**: Lấy phần môi trường làm việc phù hợp (thường là mục số 5 trong tài liệu). " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
 
-            "**nganh_nghe_tuong_ung**: Lấy phần ngành nghề tương ứng. Định dạng theo cấu trúc sau:\n" +
-            "- Dòng đầu: 'Ngành tại NEU' (in đậm nếu có thể)\n" +
-            "- Liệt kê từng ngành kèm mã ngành theo định dạng: Tên ngành (Mã ngành)\n" +
-            "- Dòng tiếp: 'Nghề nghiệp tương ứng'\n" +
-            "- Liệt kê từng nghề nghiệp\n" +
-            "- Dòng cuối: 'Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.'\n" +
-            "Bỏ tất cả số thứ tự đầu dòng, bỏ tiêu đề mục gốc.\n\n" +
+            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề trong tài liệu. "  +
+            "Tài liệu có thể tổ chức theo nhiều lĩnh vực con, nhóm ngành — hãy gom tất cả lại. "  +
+            "Định dạng output theo cấu trúc sau (chỉ text thuần, không markdown):\n" +
+            "Ngành tại NEU\n" +
+            "Tên ngành đầy đủ (Mã ngành)\n" +
+            "Tên ngành đầy đủ (Mã ngành)\n" +
+            "... (liệt kê hết tất cả ngành)\n" +
+            "\n" +
+            "Nghề nghiệp tương ứng\n" +
+            "Liệt kê các nghề, mỗi nghề một dòng\n" +
+            "\n" +
+            "Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.\n\n" +
+            "TUYỆT ĐỐI không để lại: số thứ tự (6.1, 6.2.1...), tiêu đề lĩnh vực/nhóm ngành, từ 'Nghề nghiệp tương ứng:' inline sau tên ngành.\n\n" +
 
             "## TÀI LIỆU\n" +
             text,
