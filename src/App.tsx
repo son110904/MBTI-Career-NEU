@@ -242,18 +242,27 @@ function Result({
 }) {
   const [consultationLoading, setConsultationLoading] = useState(true);
   const [consultationText, setConsultationText] = useState<string | null>(null);
+  const [consultationSections, setConsultationSections] = useState<Record<string, string> | null>(null);
   const [consultationError, setConsultationError] = useState<string | null>(null);
 
   useEffect(() => {
     setConsultationLoading(true);
     setConsultationError(null);
     setConsultationText(null);
+    setConsultationSections(null);
     fetch(`${API_BASE}/api/ai-consultation?mbtiType=${encodeURIComponent(mbtiType)}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.status === 404 ? "Chưa có dữ liệu tư vấn cho tính cách này." : "Tải tư vấn thất bại.");
         return res.json();
       })
       .then((data) => {
+        const sections = data.sections && typeof data.sections === "object" ? data.sections : null;
+        const normalizedEntries = sections
+          ? Object.entries(sections).filter(([, value]) => typeof value === "string" && value.trim())
+          : [];
+        if (normalizedEntries.length) {
+          setConsultationSections(Object.fromEntries(normalizedEntries));
+        }
         setConsultationText(data.consultation ?? "");
       })
       .catch((err) => {
@@ -286,7 +295,7 @@ function Result({
       </div>
 
       <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
-        <h3 className="font-semibold text-slate-800">Tư vấn từ tài liệu</h3>
+        <h3 className="font-semibold text-slate-800">Tư vấn AI</h3>
         {consultationLoading && (
           <div className="mt-3 flex items-center gap-2 text-indigo-600">
             <svg
@@ -316,7 +325,29 @@ function Result({
         {!consultationLoading && consultationError && (
           <p className="mt-3 text-sm text-amber-700">{consultationError}</p>
         )}
-        {!consultationLoading && consultationText && (
+        {!consultationLoading && consultationSections && (
+          <div className="mt-4 space-y-4">
+            {[
+              { key: "ten_tinh_cach", label: "TÊN TÍNH CÁCH" },
+              { key: "khai_niem", label: "KHÁI NIỆM" },
+              { key: "phan_tich_cac_chieu_tinh_cach", label: "PHÂN TÍCH CÁC CHIỀU TÍNH CÁCH" },
+              { key: "diem_manh", label: "ĐIỂM MẠNH" },
+              { key: "diem_yeu", label: "ĐIỂM YẾU" },
+              { key: "moi_truong", label: "MÔI TRƯỜNG" },
+              { key: "nganh_nghe_tuong_ung", label: "NGÀNH, NGHỀ TƯƠNG ỨNG" },
+            ]
+              .filter((item) => consultationSections[item.key])
+              .map((item) => (
+                <section key={item.key} className="space-y-2">
+                  <h4 className="text-sm font-semibold text-slate-700">{item.label}</h4>
+                  <p className="whitespace-pre-wrap text-slate-700 leading-relaxed">
+                    {consultationSections[item.key]}
+                  </p>
+                </section>
+              ))}
+          </div>
+        )}
+        {!consultationLoading && !consultationSections && consultationText && (
           <p className="mt-3 whitespace-pre-wrap text-slate-700 leading-relaxed">
             {consultationText}
           </p>
