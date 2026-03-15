@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { MBTI_QUESTIONS, MBTI_TYPE_INFO } from "./mbti-data";
 import type { MBTIQuestion } from "./mbti-data";
-import { computeMBTI, computeMBTIScores, type AnswerRecord } from "./mbti-score";
+import { computeMBTI, type AnswerRecord } from "./mbti-score";
 
 type Step = "intro" | "quiz" | "result";
 
@@ -11,7 +11,6 @@ export default function App() {
   const [step, setStep] = useState<Step>("intro");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerRecord>({});
-  const [hasSavedResult, setHasSavedResult] = useState(false);
 
   const currentQuestion: MBTIQuestion | undefined = MBTI_QUESTIONS[currentIndex];
   const answeredCount = Object.keys(answers).length;
@@ -39,56 +38,24 @@ export default function App() {
     setStep("quiz");
     setCurrentIndex(0);
     setAnswers({});
-    setHasSavedResult(false);
   }, []);
 
   const handleRetry = useCallback(() => {
     setStep("intro");
     setCurrentIndex(0);
     setAnswers({});
-    setHasSavedResult(false);
   }, []);
 
   const resultType = step === "result" ? computeMBTI(answers) : null;
   const resultInfo = resultType ? MBTI_TYPE_INFO[resultType] : null;
 
-  useEffect(() => {
-    if (step !== "result" || !resultType || hasSavedResult) return;
-
-    const payload = {
-      mbtiType: resultType,
-      scores: computeMBTIScores(answers),
-      answers,
-      meta: {
-        totalQuestions,
-        answeredCount,
-        completedAt: new Date().toISOString(),
-      },
-    };
-
-    fetch("http://localhost:4000/api/mbti-result", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Save failed");
-        return res.json();
-      })
-      .then(() => {
-        setHasSavedResult(true);
-      })
-      .catch((err) => {
-        console.error("Lưu kết quả MBTI thất bại:", err);
-      });
-  }, [step, resultType, answers, hasSavedResult, answeredCount]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800">
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-2xl px-4 py-3">
           <h1 className="text-lg font-semibold text-slate-800">
-            Trắc nghiệm MBTI – Định hướng nghề nghiệp
+            Trắc nghiệm MBTI 
           </h1>
           <p className="text-sm text-slate-500">
             Đại học Kinh tế Quốc dân (NEU)
@@ -115,8 +82,8 @@ export default function App() {
           />
         )}
 
-        {step === "result" && resultInfo && (
-          <Result info={resultInfo} saved={hasSavedResult} onRetry={handleRetry} />
+        {step === "result" && resultInfo && resultType && (
+          <Result info={resultInfo} mbtiType={resultType} onRetry={handleRetry} />
         )}
       </main>
 
@@ -178,6 +145,25 @@ function Quiz({
   onNext: () => void;
 }) {
   const currentAnswer = answers[question.id];
+  const scaleOptions = [
+    { value: 7, tone: "agree", size: 44, label: "Hoàn toàn đồng ý" },
+    { value: 6, tone: "agree", size: 36, label: "Rất đồng ý" },
+    { value: 5, tone: "agree", size: 30, label: "Đồng ý" },
+    { value: 4, tone: "neutral", size: 22, label: "Trung lập" },
+    { value: 3, tone: "disagree", size: 30, label: "Không đồng ý" },
+    { value: 2, tone: "disagree", size: 36, label: "Rất không đồng ý" },
+    { value: 1, tone: "disagree", size: 44, label: "Hoàn toàn không đồng ý" },
+  ] as const;
+  const toneClasses = {
+    agree: "border-emerald-500 text-emerald-700 hover:border-emerald-600",
+    neutral: "border-slate-300 text-slate-500 hover:border-slate-400",
+    disagree: "border-purple-500 text-purple-700 hover:border-purple-600",
+  } as const;
+  const selectedClasses = {
+    agree: "bg-emerald-50 ring-2 ring-emerald-300",
+    neutral: "bg-slate-100 ring-2 ring-slate-300",
+    disagree: "bg-purple-50 ring-2 ring-purple-300",
+  } as const;
 
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
@@ -194,25 +180,31 @@ function Quiz({
       <p className="text-lg font-medium text-slate-800">
         {question.text}
       </p>
-      <p className="text-sm text-slate-500 mt-2">
-        (1 = hoàn toàn không đồng ý, 7 = hoàn toàn đồng ý)
-      </p>
 
-      <div className="mt-6 grid grid-cols-7 gap-2 text-center">
-        {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => onAnswer(n)}
-            className={`rounded-full border-2 px-3 py-2 font-medium transition ${
-              currentAnswer === n
-                ? "border-indigo-500 bg-indigo-50 text-indigo-800"
-                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            {n}
-          </button>
-        ))}
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <span className="text-sm font-medium text-emerald-600 sm:w-24">
+          Đồng ý
+        </span>
+        <div className="flex flex-1 items-center justify-center gap-3">
+          {scaleOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onAnswer(option.value)}
+              aria-label={option.label}
+              title={option.label}
+              className={`rounded-full border-2 bg-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                toneClasses[option.tone]
+              } ${
+                currentAnswer === option.value ? selectedClasses[option.tone] : ""
+              }`}
+              style={{ width: option.size, height: option.size }}
+            />
+          ))}
+        </div>
+        <span className="text-sm font-medium text-purple-600 sm:w-24 sm:text-right">
+          Không đồng ý
+        </span>
       </div>
 
       <div className="mt-6 flex justify-between">
@@ -237,15 +229,41 @@ function Quiz({
   );
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+
 function Result({
-  info: { type, nameVi, shortDesc, careers, neuMajors, traits },
-  saved,
+  info: { type, nameVi, traits },
+  mbtiType,
   onRetry,
 }: {
   info: import("./mbti-data").MBTITypeInfo;
-  saved: boolean;
+  mbtiType: string;
   onRetry: () => void;
 }) {
+  const [consultationLoading, setConsultationLoading] = useState(true);
+  const [consultationText, setConsultationText] = useState<string | null>(null);
+  const [consultationError, setConsultationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setConsultationLoading(true);
+    setConsultationError(null);
+    setConsultationText(null);
+    fetch(`${API_BASE}/api/ai-consultation?mbtiType=${encodeURIComponent(mbtiType)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(res.status === 404 ? "Chưa có dữ liệu tư vấn cho tính cách này." : "Tải tư vấn thất bại.");
+        return res.json();
+      })
+      .then((data) => {
+        setConsultationText(data.consultation ?? "");
+      })
+      .catch((err) => {
+        setConsultationError(err.message || "Không tải được lời tư vấn.");
+      })
+      .finally(() => {
+        setConsultationLoading(false);
+      });
+  }, [mbtiType]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
@@ -255,7 +273,6 @@ function Result({
           </span>
           <h2 className="text-xl font-semibold text-slate-800">{nameVi}</h2>
         </div>
-        <p className="mt-3 text-slate-600">{shortDesc}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {traits.map((t) => (
             <span
@@ -266,32 +283,44 @@ function Result({
             </span>
           ))}
         </div>
-        {saved && (
-          <p className="mt-3 text-xs text-emerald-600">
-            Kết quả đã được lưu vào hệ thống.
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
+        <h3 className="font-semibold text-slate-800">Tư vấn từ tài liệu</h3>
+        {consultationLoading && (
+          <div className="mt-3 flex items-center gap-2 text-indigo-600">
+            <svg
+              className="h-5 w-5 animate-spin"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <span>Đang tải lời tư vấn...</span>
+          </div>
+        )}
+        {!consultationLoading && consultationError && (
+          <p className="mt-3 text-sm text-amber-700">{consultationError}</p>
+        )}
+        {!consultationLoading && consultationText && (
+          <p className="mt-3 whitespace-pre-wrap text-slate-700 leading-relaxed">
+            {consultationText}
           </p>
         )}
-      </div>
-
-      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
-        <h3 className="font-semibold text-slate-800">Gợi ý nghề nghiệp phù hợp</h3>
-        <ul className="mt-2 list-inside list-disc space-y-1 text-slate-600">
-          {careers.map((c) => (
-            <li key={c}>{c}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
-        <h3 className="font-semibold text-slate-800">Ngành / Chuyên ngành gợi ý tại NEU</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Các ngành đào tạo tại Đại học Kinh tế Quốc dân phù hợp với nhóm tính cách của bạn:
-        </p>
-        <ul className="mt-2 list-inside list-disc space-y-1 text-slate-600">
-          {neuMajors.map((m) => (
-            <li key={m}>{m}</li>
-          ))}
-        </ul>
       </div>
 
       <button
