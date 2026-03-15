@@ -278,10 +278,10 @@ async function extractSectionsWithAI(text, mbtiType) {
             "Bỏ hoàn toàn các tiêu đề mục và số thứ tự đầu dòng (ví dụ: '1.', '2.', 'I.', 'II.' ...). " +
             "Giữ nguyên nội dung, trình bày rõ ràng từng chiều tính cách.\n\n" +
 
-            "**diem_manh**: Lấy phần điểm mạnh " +
+            "**diem_manh**: Lấy phần điểm mạnh (là mục số 3 trong tài liệu). " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
 
-            "**diem_yeu**: Lấy phần hạn chế " +
+            "**diem_yeu**: Lấy phần hạn chế (là mục số 4 trong tài liệu). " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
 
             "**moi_truong**: Lấy phần môi trường làm việc phù hợp (thường là mục số 5 trong tài liệu). " +
