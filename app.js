@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Express app (API only) for MBTI-Career-NEU
  * This file is used by both local server and Vercel serverless.
  */
@@ -56,24 +56,24 @@ function streamToBuffer(stream) {
 }
 
 const SECTION_DEFS = [
-  { key: "ten_tinh_cach", labels: ["TÊN TÍNH CÁCH", "TEN TINH CACH"] },
-  { key: "khai_niem", labels: ["KHÁI NIỆM", "KHAI NIEM"] },
+  { key: "ten_tinh_cach", labels: ["TEN TINH CACH", "TINH CACH"] },
+  { key: "khai_niem", labels: ["KHAI NIEM"] },
   {
     key: "phan_tich_cac_chieu_tinh_cach",
     labels: [
-      "PHÂN TÍCH CÁC CHIỀU TÍNH CÁCH", "PHAN TICH CAC CHIEU TINH CACH",
-      "CẤU TRÚC TÍNH CÁCH", "CAU TRUC TINH CACH",
-      "Ý NGHĨA CÁC CHIỀU TÍNH CÁCH", "Y NGHIA CAC CHIEU TINH CACH",
+      "PHAN TICH CAC CHIEU TINH CACH",
+      "CAU TRUC TINH CACH",
+      "Y NGHIA CAC CHIEU TINH CACH",
     ],
   },
-  { key: "diem_manh", labels: ["ĐIỂM MẠNH", "DIEM MANH"] },
-  { key: "diem_yeu", labels: ["ĐIỂM YẾU", "DIEM YEU", "HẠN CHẾ", "HAN CHE"] },
-  { key: "moi_truong", labels: ["MÔI TRƯỜNG", "MOI TRUONG"] },
+  { key: "diem_manh", labels: ["DIEM MANH", "UU DIEM"] },
+  { key: "diem_yeu", labels: ["DIEM YEU", "HAN CHE", "NHUOC DIEM"] },
+  { key: "moi_truong", labels: ["MOI TRUONG", "MOI TRUONG LAM VIEC PHU HOP"] },
   {
     key: "nganh_nghe_tuong_ung",
     labels: [
-      "NGÀNH, NGHỀ TƯƠNG ỨNG", "NGANH, NGHE TUONG UNG",
-      "DANH MỤC NGÀNH VÀ NGHỀ NGHIỆP TƯƠNG ỨNG", "DANH MUC NGANH VA NGHE NGHIEP TUONG UNG",
+      "NGANH NGHE TUONG UNG",
+      "DANH MUC NGANH VA NGHE NGHIEP TUONG UNG",
     ],
   },
 ];
@@ -131,7 +131,7 @@ function extractSectionsByHeadings(text) {
     if (matchedKey) {
       flush();
       currentKey = matchedKey;
-      const remainder = line.split(/[:\-–—]/).slice(1).join(":").trim();
+      const remainder = line.split(/[:\-â€“â€”]/).slice(1).join(":").trim();
       if (remainder) buffer.push(remainder);
       continue;
     }
@@ -145,7 +145,7 @@ function extractSectionsByHeadings(text) {
 
 /**
  * Strip leading bullets/numbering from a single line.
- * Removes patterns like: 1. / 1) / (1) / - / • / 6.1.2.3
+ * Removes patterns like: 1. / 1) / (1) / - / â€¢ / 6.1.2.3
  */
 function stripLeadingNumber(line) {
   return line
@@ -153,7 +153,7 @@ function stripLeadingNumber(line) {
     .replace(/^\s*\d+[\.)\]\s]+/g, "")
     .replace(/^\s*\(\d+\)\s+/g, "")
     .replace(/^\s*[IVXLCDM]+\.\s+/gi, "")
-    .replace(/^\s*[-–•]\s+/g, "");
+    .replace(/^\s*[-â€“â€¢]\s+/g, "");
 }
 
 /**
@@ -176,24 +176,24 @@ function cleanSectionText(text) {
 function cleanNganhNghe(text) {
   if (!text) return text;
 
-  const ngheHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
+  const ngheHeaderRe = /Ngh[eá»]\s+nghi[eá»‡]p\s+t[uÆ°][oÆ¡]ng\s+[uá»©]ng\s*[:\-]?\s*/i;
   const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
 
-  // ── Detect if text is already in clean format ──
-  // Clean format: has "Ngành tại NEU" heading AND no inline "Nghề nghiệp tương ứng:" on the same line as a code
+  // â”€â”€ Detect if text is already in clean format â”€â”€
+  // Clean format: has "NgÃ nh táº¡i NEU" heading AND no inline "Nghá» nghiá»‡p tÆ°Æ¡ng á»©ng:" on the same line as a code
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  const hasCleanHeader = lines.some((l) => /^Ng[àa]nh\s+t[aạ]i\s+NEU/i.test(l));
+  const hasCleanHeader = lines.some((l) => /^Ng[Ã a]nh\s+t[aáº¡]i\s+NEU/i.test(l));
   const hasRawInlineLines = lines.some((l) => codeRe.test(l) && ngheHeaderRe.test(l));
 
   if (hasCleanHeader && !hasRawInlineLines) {
-    // Already clean — just ensure the closing sentence is present
-    const closing = "Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.";
-    const hasClosing = lines.some((l) => l.includes("Hy vọng"));
+    // Already clean â€” just ensure the closing sentence is present
+    const closing = "Hy vá»ng cÃ³ thá»ƒ giÃºp báº¡n lá»±a chá»n Ä‘Æ°á»£c Ä‘á»‹nh hÆ°á»›ng phÃ¹ há»£p.";
+    const hasClosing = lines.some((l) => l.includes("Hy vá»ng"));
     return hasClosing ? text.trim() : text.trim() + "\n\n" + closing;
   }
 
-  // ── Parse raw format ──
-  // Each line typically: "6.x.x Tên ngành (MãNgành) Nghề nghiệp tương ứng: Nghề1, Nghề2, ..."
+  // â”€â”€ Parse raw format â”€â”€
+  // Each line typically: "6.x.x TÃªn ngÃ nh (MÃ£NgÃ nh) Nghá» nghiá»‡p tÆ°Æ¡ng á»©ng: Nghá»1, Nghá»2, ..."
   const nganhSet = new Map();
   const ngheSet = new Set();
 
@@ -207,7 +207,7 @@ function cleanNganhNghe(text) {
         const name = nganhPart
           .replace(codeRe, "")
           .replace(/^[\s\d\.]+/, "")
-          .replace(/^Ng[àa]nh\s+/i, "")
+          .replace(/^Ng[Ã a]nh\s+/i, "")
           .trim();
         if (name && !nganhSet.has(code)) nganhSet.set(code, name);
       }
@@ -222,16 +222,16 @@ function cleanNganhNghe(text) {
 
   const parts = [];
   if (nganhSet.size) {
-    parts.push("Ngành tại NEU");
+    parts.push("NgÃ nh táº¡i NEU");
     for (const [code, name] of nganhSet) parts.push(`${name} (${code})`);
   }
   if (ngheSet.size) {
     parts.push("");
-    parts.push("Nghề nghiệp tương ứng");
+    parts.push("Nghá» nghiá»‡p tÆ°Æ¡ng á»©ng");
     for (const job of ngheSet) parts.push(job);
   }
   parts.push("");
-  parts.push("Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.");
+  parts.push("Hy vá»ng cÃ³ thá»ƒ giÃºp báº¡n lá»±a chá»n Ä‘Æ°á»£c Ä‘á»‹nh hÆ°á»›ng phÃ¹ há»£p.");
   return parts.join("\n").trim();
 }
 
@@ -258,53 +258,42 @@ async function extractSectionsWithAI(text, mbtiType) {
     const response = await openaiClient.responses.create({
       model: OPENAI_MODEL,
       input: [
-        {
-          role: "system",
-          content:
-            "Bạn là trợ lý trích xuất và định dạng thông tin MBTI. Chỉ trả về JSON hợp lệ theo schema được yêu cầu. Nếu không tìm thấy mục nào, để chuỗi rỗng.",
-        },
-        {
-          role: "user",
-          content:
-            `Hãy trích xuất và định dạng các mục sau từ tài liệu về MBTI ${mbtiType}. Tuân thủ nghiêm ngặt các yêu cầu định dạng bên dưới.\n\n` +
-
-            "## YÊU CẦU ĐỊNH DẠNG TỪNG MỤC\n\n" +
-
-            `**ten_tinh_cach**: Chỉ lấy đúng mã loại tính cách (ví dụ: "${mbtiType}"). Không lấy tên mô tả, không lấy số thứ tự, không lấy gì khác.\n\n` +
-
-            "**khai_niem**: Lấy đúng phần khái niệm/mô tả tổng quan về tính cách này. Bỏ tiêu đề mục, bỏ số thứ tự đầu dòng nếu có.\n\n" +
-
-            "**phan_tich_cac_chieu_tinh_cach**: Lấy phần phân tích các chiều/cấu trúc tính cách. " +
-            "Bỏ hoàn toàn các tiêu đề mục và số thứ tự đầu dòng (ví dụ: '1.', '2.', 'I.', 'II.' ...). " +
-            "Giữ nguyên nội dung, trình bày rõ ràng từng chiều tính cách.\n\n" +
-
-            "**diem_manh**: Lấy phần điểm mạnh (là mục số 3 trong tài liệu). " +
-            "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
-
-            "**diem_yeu**: Lấy phần hạn chế (là mục số 4 trong tài liệu). " +
-            "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
-
-            "**moi_truong**: Lấy phần môi trường làm việc phù hợp (thường là mục số 5 trong tài liệu). " +
-            "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
-
-            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề trong tài liệu. "  +
-            "Tài liệu có thể tổ chức theo nhiều lĩnh vực con, nhóm ngành — hãy gom tất cả lại. "  +
-            "Định dạng output theo cấu trúc sau (chỉ text thuần, không markdown):\n" +
-            "Ngành tại NEU\n" +
-            "Tên ngành đầy đủ (Mã ngành)\n" +
-            "Tên ngành đầy đủ (Mã ngành)\n" +
-            "... (liệt kê hết tất cả ngành)\n" +
-            "\n" +
-            "Nghề nghiệp tương ứng\n" +
-            "Liệt kê các nghề, mỗi nghề một dòng\n" +
-            "\n" +
-            "Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.\n\n" +
-            "TUYỆT ĐỐI không để lại: số thứ tự (6.1, 6.2.1...), tiêu đề lĩnh vực/nhóm ngành, từ 'Nghề nghiệp tương ứng:' inline sau tên ngành.\n\n" +
-
-            "## TÀI LIỆU\n" +
-            text,
-        },
-      ],
+  {
+    role: "system",
+    content:
+      "Ban la tro ly trich xuat va dinh dang thong tin MBTI. Chi tra ve JSON hop le theo schema yeu cau. Neu khong tim thay muc nao, de chuoi rong.",
+  },
+  {
+    role: "user",
+    content:
+      `Hay trich xuat va dinh dang cac muc sau tu tai lieu ve MBTI ${mbtiType}. Tuan thu nghiem ngat cac yeu cau dinh dang ben duoi.\n\n` +
+      "## YEU CAU DINH DANG TUNG MUC\n\n" +
+      `**ten_tinh_cach**: Chi lay dung ma loai tinh cach (vi du: "${mbtiType}"). Khong lay ten mo ta, khong lay so thu tu, khong lay gi khac.\n\n` +
+      "**khai_niem**: Lay dung phan khai niem/mo ta tong quan ve tinh cach nay. Bo tieu de muc, bo so thu tu dau dong neu co.\n\n" +
+      "**phan_tich_cac_chieu_tinh_cach**: Lay phan phan tich cac chieu/cau truc tinh cach. " +
+      "Bo hoan toan cac tieu de muc va so thu tu dau dong (vi du: '1.', '2.', 'I.', 'II.' ...). " +
+      "Giu nguyen noi dung, trinh bay ro rang tung chieu tinh cach.\n\n" +
+      "**diem_manh**: Lay phan diem manh (thuong la muc so 3 trong tai lieu). " +
+      "Bo tieu de muc va tat ca so thu tu dau dong. Chi giu noi dung.\n\n" +
+      "**diem_yeu**: Lay phan han che/nhuoc diem (thuong la muc so 4 trong tai lieu). " +
+      "Bo tieu de muc va tat ca so thu tu dau dong. Chi giu noi dung.\n\n" +
+      "**moi_truong**: Lay phan moi truong lam viec phu hop (thuong la muc so 5 trong tai lieu). " +
+      "Bo tieu de muc va tat ca so thu tu dau dong. Chi giu noi dung.\n\n" +
+      "**nganh_nghe_tuong_ung**: Lay toan bo danh muc nganh nghe trong tai lieu. " +
+      "Tai lieu co the to chuc theo nhieu linh vuc con, nhom nganh -- hay gom tat ca lai. " +
+      "Dinh dang output theo cau truc sau (chi text thuan, khong markdown):\n" +
+      "Nganh tai NEU\n" +
+      "Ten nganh day du (Ma nganh)\n" +
+      "Ten nganh day du (Ma nganh)\n" +
+      "... (liet ke het tat ca nganh)\n\n" +
+      "Nghe nghiep tuong ung\n" +
+      "Liet ke cac nghe, moi nghe mot dong\n\n" +
+      "Hy vong co the giup ban lua chon duoc dinh huong phu hop.\n\n" +
+      "TUYET DOI khong de lai: so thu tu (6.1, 6.2.1...), tieu de linh vuc/nhom nganh, tu 'Nghe nghiep tuong ung:' inline sau ten nganh.\n\n" +
+      "## TAI LIEU\n" +
+      text,
+  },
+],
       format: {
         type: "json_schema",
         name: "mbti_extract",
@@ -354,19 +343,36 @@ app.get("/api/ai-consultation", async (req, res) => {
       return res.status(400).json({ error: "mbtiType khong hop le. Can mot trong 16 loai MBTI." });
     }
 
-    const objectName = `courses-processed/personality/M\u00f4 t\u1ea3 ${mbtiType}.docx`;
+    const typeVariants = [mbtiType, mbtiType.toLowerCase()];
+    const objectNames = [];
+    for (const typeVariant of typeVariants) {
+      objectNames.push(`courses-processed/personality/M\u00f4 t\u1ea3 ${typeVariant}.docx`);
+      objectNames.push(`courses-processed/personality/Mo ta ${typeVariant}.docx`);
+    }
     let personalityData = "";
+    let lastErr = null;
+    let usedObject = null;
 
-    try {
-      const dataStream = await minioClient.getObject(MINIO_BUCKET, objectName);
-      const buffer = await streamToBuffer(dataStream);
-      const result = await mammoth.extractRawText({ buffer });
-      personalityData = (result.value || "").trim();
-    } catch (minioErr) {
-      console.error("[MinIO] Doc file loi:", objectName, minioErr.message);
+    for (const objectName of objectNames) {
+      try {
+        const dataStream = await minioClient.getObject(MINIO_BUCKET, objectName);
+        const buffer = await streamToBuffer(dataStream);
+        const result = await mammoth.extractRawText({ buffer });
+        personalityData = (result.value || "").trim();
+        usedObject = objectName;
+        break;
+      } catch (minioErr) {
+        lastErr = minioErr;
+      }
+    }
+
+    if (!personalityData) {
+      const errMessage = lastErr && lastErr.message ? lastErr.message : "Unknown MinIO error";
+      console.error("[MinIO] Doc file loi:", objectNames.join(" | "), errMessage);
       return res.status(404).json({
         error: "Khong tim thay du lieu tinh cach cho " + mbtiType,
-        detail: minioErr.message,
+        detail: errMessage,
+        tried: objectNames,
       });
     }
 
@@ -404,3 +410,5 @@ app.get("/api/ai-consultation", async (req, res) => {
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "MBTI-NEU API" }));
 
 export default app;
+
+
