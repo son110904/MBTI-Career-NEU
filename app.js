@@ -176,27 +176,34 @@ function cleanSectionText(text) {
 function cleanNganhNghe(text) {
   if (!text) return text;
 
-  // Each line in the source doc typically reads:
-  // "6.2.3.1 Tên ngành (MãNgành) Nghề nghiệp tương ứng: Nghề1, Nghề2, ..."
-  // We split on the "Nghề nghiệp tương ứng" separator to isolate each part.
   const ngheHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
   const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
 
-  const nganhSet = new Map(); // code -> name, insertion-ordered
-  const ngheSet = new Set();  // deduplicated jobs
+  // ── Detect if text is already in clean format ──
+  // Clean format: has "Ngành tại NEU" heading AND no inline "Nghề nghiệp tương ứng:" on the same line as a code
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const hasCleanHeader = lines.some((l) => /^Ng[àa]nh\s+t[aạ]i\s+NEU/i.test(l));
+  const hasRawInlineLines = lines.some((l) => codeRe.test(l) && ngheHeaderRe.test(l));
 
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
+  if (hasCleanHeader && !hasRawInlineLines) {
+    // Already clean — just ensure the closing sentence is present
+    const closing = "Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.";
+    const hasClosing = lines.some((l) => l.includes("Hy vọng"));
+    return hasClosing ? text.trim() : text.trim() + "\n\n" + closing;
+  }
 
+  // ── Parse raw format ──
+  // Each line typically: "6.x.x Tên ngành (MãNgành) Nghề nghiệp tương ứng: Nghề1, Nghề2, ..."
+  const nganhSet = new Map();
+  const ngheSet = new Set();
+
+  for (const line of lines) {
     const splitIdx = line.search(ngheHeaderRe);
     if (splitIdx > -1) {
-      // ── Extract ngành ──
       const nganhPart = line.slice(0, splitIdx).trim();
       const codeMatch = nganhPart.match(codeRe);
       if (codeMatch) {
         const code = codeMatch[1];
-        // Name = everything before the (code), stripped of leading numbering and "Ngành" prefix
         const name = nganhPart
           .replace(codeRe, "")
           .replace(/^[\s\d\.]+/, "")
@@ -204,8 +211,6 @@ function cleanNganhNghe(text) {
           .trim();
         if (name && !nganhSet.has(code)) nganhSet.set(code, name);
       }
-
-      // ── Extract nghề ──
       const ngheHeaderMatch = line.match(ngheHeaderRe);
       const jobsPart = line.slice(splitIdx + (ngheHeaderMatch ? ngheHeaderMatch[0].length : 0)).trim();
       for (const job of jobsPart.split(/[,;]/)) {
@@ -216,25 +221,17 @@ function cleanNganhNghe(text) {
   }
 
   const parts = [];
-
   if (nganhSet.size) {
     parts.push("Ngành tại NEU");
-    for (const [code, name] of nganhSet) {
-      parts.push(`${name} (${code})`);
-    }
+    for (const [code, name] of nganhSet) parts.push(`${name} (${code})`);
   }
-
   if (ngheSet.size) {
     parts.push("");
     parts.push("Nghề nghiệp tương ứng");
-    for (const job of ngheSet) {
-      parts.push(job);
-    }
+    for (const job of ngheSet) parts.push(job);
   }
-
   parts.push("");
   parts.push("Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.");
-
   return parts.join("\n").trim();
 }
 
@@ -281,10 +278,10 @@ async function extractSectionsWithAI(text, mbtiType) {
             "Bỏ hoàn toàn các tiêu đề mục và số thứ tự đầu dòng (ví dụ: '1.', '2.', 'I.', 'II.' ...). " +
             "Giữ nguyên nội dung, trình bày rõ ràng từng chiều tính cách.\n\n" +
 
-            "**diem_manh**: Lấy phần điểm mạnh (thường là mục số 3 trong tài liệu). " +
+            "**diem_manh**: Lấy phần điểm mạnh " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
 
-            "**diem_yeu**: Lấy phần hạn chế/điểm yếu (thường là mục số 4 trong tài liệu). " +
+            "**diem_yeu**: Lấy phần hạn chế " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
 
             "**moi_truong**: Lấy phần môi trường làm việc phù hợp (thường là mục số 5 trong tài liệu). " +

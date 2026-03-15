@@ -229,7 +229,177 @@ function Quiz({
   );
 }
 
+type SectionValue = string | string[];
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const BULLET_SECTION_KEYS = new Set(["diem_manh", "diem_yeu", "moi_truong"]);
+
+function normalizeForMatch(input: string) {
+  return input
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function sectionHasContent(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.some((item) => typeof item === "string" && item.trim());
+  }
+  return typeof value === "string" && value.trim();
+}
+
+function toLines(value: SectionValue): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => item.trim()).filter(Boolean);
+  }
+  return value
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function toBullets(value: SectionValue): string[] {
+  const lines = toLines(value);
+  if (lines.length > 1) return lines;
+
+  const text = lines[0] ?? "";
+  const bySymbols = text
+    .split(/(?:\s*•\s*|\s*-\s*|\s*;\s*|\s*\u2022\s*)/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (bySymbols.length > 1) return bySymbols;
+
+  const byCaps = text
+    .split(/(?<=\p{Ll}[\.\)]?)\s+(?=\p{Lu})/gu)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (byCaps.length > 1) return byCaps;
+
+  return text ? [text] : [];
+}
+
+function formatDimensionLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return "";
+
+  // Already formatted: "Dim – (VN): ..."
+  const formattedMatch = trimmed.match(/^([A-Za-z]+)\s*[-–—]\s*\(([^)]+)\)\s*:\s*(.+)$/);
+  if (formattedMatch) {
+    const [, dim, vn, rest] = formattedMatch;
+    return `${dim} – (${vn.trim()}): ${rest.trim()}`;
+  }
+
+  // Match: "Dim – VN ..."
+  const match = trimmed.match(/^([A-Za-z]+)\s*[-–—]\s*(.+)$/);
+  if (!match) return trimmed;
+
+  const [, dim, restRaw] = match;
+  const rest = restRaw.trim();
+  if (!rest) return trimmed;
+
+  // If rest starts with a parenthetical, keep original
+  if (rest.startsWith("(")) return `${dim} – ${rest}`;
+
+  const words = rest.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return trimmed;
+
+  const first = words[0];
+  const firstNorm = normalizeForMatch(first);
+  const stopStarts = new Set([
+    "ho",
+    "cac",
+    "nhung",
+    "nguoi",
+    "istj",
+    "intj",
+    "intp",
+    "entj",
+    "entp",
+    "infj",
+    "infp",
+    "enfj",
+    "enfp",
+    "istp",
+    "isfp",
+    "estj",
+    "estp",
+    "esfj",
+    "esfp",
+    "isfj",
+  ]);
+  if (stopStarts.has(firstNorm) || /^[A-Z]{4}$/.test(first)) return trimmed;
+
+  const vn = `${words[0]} ${words[1]}`.trim();
+  const description = words.slice(2).join(" ").trim();
+  if (!description) return trimmed;
+
+  return `${dim} – (${vn}): ${description}`;
+}
+
+function renderDimensionAnalysis(value: SectionValue) {
+  let lines = toLines(value);
+  if (lines.length <= 1) {
+    lines = toBullets(value);
+  }
+  const normalized = lines
+    .map(formatDimensionLine)
+    .filter(Boolean);
+
+  if (!normalized.length) return null;
+  return (
+    <ul className="list-disc space-y-1 pl-5 text-slate-700 leading-relaxed">
+      {normalized.map((item, idx) => (
+        <li key={`dim-${idx}`}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+function renderNganhNghe(value: SectionValue) {
+  const lines = toLines(value);
+  if (!lines.length) return null;
+  return (
+    <div className="space-y-1">
+      {lines.map((line, idx) => {
+        const normalized = normalizeForMatch(line);
+        const isHeading =
+          normalized.startsWith("nganh tai neu") ||
+          normalized.startsWith("nghe nghiep tuong ung") ||
+          normalized.startsWith("nganh, nghe tuong ung");
+        return (
+          <p key={`${idx}-${line}`} className="text-slate-700 leading-relaxed">
+            {isHeading ? <strong>{line}</strong> : line}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function renderSectionContent(key: string, value: SectionValue) {
+  if (key === "phan_tich_cac_chieu_tinh_cach") {
+    return renderDimensionAnalysis(value);
+  }
+  if (key === "nganh_nghe_tuong_ung") {
+    return renderNganhNghe(value);
+  }
+  if (BULLET_SECTION_KEYS.has(key)) {
+    const bullets = toBullets(value);
+    return (
+      <ul className="list-disc space-y-1 pl-5 text-slate-700 leading-relaxed">
+        {bullets.map((item, idx) => (
+          <li key={`${key}-${idx}`}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <p className="whitespace-pre-wrap text-slate-700 leading-relaxed">
+      {Array.isArray(value) ? value.join("\n") : value}
+    </p>
+  );
+}
 
 function Result({
   info: { type, nameVi, traits },
@@ -242,7 +412,7 @@ function Result({
 }) {
   const [consultationLoading, setConsultationLoading] = useState(true);
   const [consultationText, setConsultationText] = useState<string | null>(null);
-  const [consultationSections, setConsultationSections] = useState<Record<string, string> | null>(null);
+  const [consultationSections, setConsultationSections] = useState<Record<string, SectionValue> | null>(null);
   const [consultationError, setConsultationError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -258,10 +428,10 @@ function Result({
       .then((data) => {
         const sections = data.sections && typeof data.sections === "object" ? data.sections : null;
         const normalizedEntries = sections
-          ? Object.entries(sections).filter(([, value]) => typeof value === "string" && value.trim())
+          ? Object.entries(sections).filter(([, value]) => sectionHasContent(value))
           : [];
         if (normalizedEntries.length) {
-          setConsultationSections(Object.fromEntries(normalizedEntries));
+          setConsultationSections(Object.fromEntries(normalizedEntries) as Record<string, SectionValue>);
         }
         setConsultationText(data.consultation ?? "");
       })
@@ -340,9 +510,7 @@ function Result({
               .map((item) => (
                 <section key={item.key} className="space-y-2">
                   <h4 className="text-sm font-semibold text-slate-700">{item.label}</h4>
-                  <p className="whitespace-pre-wrap text-slate-700 leading-relaxed">
-                    {consultationSections[item.key]}
-                  </p>
+                  {renderSectionContent(item.key, consultationSections[item.key] as SectionValue)}
                 </section>
               ))}
           </div>
