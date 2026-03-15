@@ -151,14 +151,41 @@ async function extractSectionsWithAI(text, mbtiType) {
         {
           role: "system",
           content:
-            "Ban la tro ly trich xuat thong tin. Chi tra ve JSON hop le theo schema. Neu khong co muc nao, de chuoi rong.",
+            "Bạn là trợ lý trích xuất và định dạng thông tin MBTI. Chỉ trả về JSON hợp lệ theo schema được yêu cầu. Nếu không tìm thấy mục nào, để chuỗi rỗng.",
         },
         {
           role: "user",
           content:
-            `Hay trich xuat cac muc sau tu tai lieu ve MBTI ${mbtiType}: ` +
-            "TEN TINH CACH, KHAI NIEM, PHAN TICH CAC CHIEU TINH CACH, DIEM MANH, DIEM YEU, MOI TRUONG, NGANH NGHE TUONG UNG.\n\n" +
-            "Tai lieu:\n" +
+            `Hãy trích xuất và định dạng các mục sau từ tài liệu về MBTI ${mbtiType}. Tuân thủ nghiêm ngặt các yêu cầu định dạng bên dưới.\n\n` +
+
+            "## YÊU CẦU ĐỊNH DẠNG TỪNG MỤC\n\n" +
+
+            `**ten_tinh_cach**: Chỉ lấy đúng mã loại tính cách (ví dụ: "${mbtiType}"). Không lấy tên mô tả, không lấy số thứ tự, không lấy gì khác.\n\n` +
+
+            "**khai_niem**: Lấy đúng phần khái niệm/mô tả tổng quan về tính cách này. Bỏ tiêu đề mục, bỏ số thứ tự đầu dòng nếu có.\n\n" +
+
+            "**phan_tich_cac_chieu_tinh_cach**: Lấy phần phân tích các chiều/cấu trúc tính cách. " +
+            "Bỏ hoàn toàn các tiêu đề mục và số thứ tự đầu dòng (ví dụ: '1.', '2.', 'I.', 'II.' ...). " +
+            "Giữ nguyên nội dung, trình bày rõ ràng từng chiều tính cách.\n\n" +
+
+            "**diem_manh**: Lấy phần điểm mạnh (thường là mục số 3 trong tài liệu). " +
+            "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
+
+            "**diem_yeu**: Lấy phần hạn chế/điểm yếu (thường là mục số 4 trong tài liệu). " +
+            "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
+
+            "**moi_truong**: Lấy phần môi trường làm việc phù hợp (thường là mục số 5 trong tài liệu). " +
+            "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. Chỉ giữ nội dung.\n\n" +
+
+            "**nganh_nghe_tuong_ung**: Lấy phần ngành nghề tương ứng. Định dạng theo cấu trúc sau:\n" +
+            "- Dòng đầu: 'Ngành tại NEU' (in đậm nếu có thể)\n" +
+            "- Liệt kê từng ngành kèm mã ngành theo định dạng: Tên ngành (Mã ngành)\n" +
+            "- Dòng tiếp: 'Nghề nghiệp tương ứng'\n" +
+            "- Liệt kê từng nghề nghiệp\n" +
+            "- Dòng cuối: 'Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.'\n" +
+            "Bỏ tất cả số thứ tự đầu dòng, bỏ tiêu đề mục gốc.\n\n" +
+
+            "## TÀI LIỆU\n" +
             text,
         },
       ],
