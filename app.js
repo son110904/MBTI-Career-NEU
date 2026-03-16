@@ -273,7 +273,8 @@ function cleanSectionText(text) {
 }
 
 /**
- * Parse the raw nganh_nghe_tuong_ung block into a clean formatted string.
+ * Parse the raw nganh_nghe_tuong_ung block into "Tên ngành: Nghề1, Nghề2" format.
+ * Group headers (Lĩnh vực / Nhóm ngành) are preserved as section titles.
  */
 function cleanNganhNghe(text) {
   if (!text) return text;
@@ -281,71 +282,124 @@ function cleanNganhNghe(text) {
   const ngheHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
   const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
 
-  // ── Detect if text is already in clean format ──
-  // Clean format: has "Ngành tại NEU" heading AND no inline "Nghề nghiệp tương ứng:" on the same line as a code
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  const hasCleanHeader = lines.some((l) => /^Ng[àa]nh\s+t[aạ]i\s+NEU/i.test(l));
-  const hasRawInlineLines = lines.some((l) => codeRe.test(l) && ngheHeaderRe.test(l));
+  // Use raw Vietnamese text check instead of normalizeHeading (which strips "L" as Roman numeral)
+  const isGroupHeader = (line) => {
+    const lower = line
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .trim();
+    return (
+      lower.startsWith("nhom nganh") ||
+      lower.startsWith("linh vuc") ||
+      lower.startsWith("khoi nganh") ||
+      lower.startsWith("nhom linh vuc")
+    );
+  };
 
-  if (hasCleanHeader && !hasRawInlineLines) {
-    // Already clean — ensure bullets and closing sentence
-    const closing = "Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.";
-    let isInList = false;
-    const fixed = lines.map((l) => {
-      if (/^Ng[àa]nh\s+t[aạ]i\s+NEU/i.test(l) || /^Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng/i.test(l)) {
-        isInList = true;
-        return l;
-      }
-      if (l.includes("Hy vọng")) { isInList = false; return l; }
-      if (isInList && !l.startsWith("-")) return `- ${l}`;
-      return l;
-    });
-    const hasClosing = fixed.some((l) => l.includes("Hy vọng"));
-    const result = fixed.join("\n");
-    return hasClosing ? result : result + "\n\n" + closing;
-  }
+  // Strip mã ngành "(7340101)" khỏi tên ngành để hiển thị gọn
+  const stripCode = (line) => line.replace(/\s*\([\d][\w_.]*(?:_[\w.]+)*\)\s*/g, "").trim();
 
-  // ── Parse raw format ──
-  // Each line typically: "6.x.x Tên ngành (MãNgành) Nghề nghiệp tương ứng: Nghề1, Nghề2, ..."
-  const nganhSet = new Map();
-  const ngheSet = new Set();
+  const rawLines = text
+    .split("\n")
+    .map(stripLeadingNumber)
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-  for (const line of lines) {
-    const splitIdx = line.search(ngheHeaderRe);
-    if (splitIdx > -1) {
-      const nganhPart = line.slice(0, splitIdx).trim();
-      const codeMatch = nganhPart.match(codeRe);
-      if (codeMatch) {
-        const code = codeMatch[1];
-        const name = nganhPart
-          .replace(codeRe, "")
-          .replace(/^[\s\d\.]+/, "")
-          .replace(/^Ng[àa]nh\s+/i, "")
-          .trim();
-        if (name && !nganhSet.has(code)) nganhSet.set(code, name);
-      }
-      const ngheHeaderMatch = line.match(ngheHeaderRe);
-      const jobsPart = line.slice(splitIdx + (ngheHeaderMatch ? ngheHeaderMatch[0].length : 0)).trim();
-      for (const job of jobsPart.split(/[,;]/)) {
-        const j = job.replace(/\.?$/, "").trim();
-        if (j) ngheSet.add(j);
-      }
+  // Step 1: Pre-process — join wrapped continuation lines.
+  // After stripping leading numbers, a continuation line is one that:
+  // - does NOT contain a major code like (7340101)
+  // - does NOT start with "Nghề nghiệp tương ứng"
+  // - is NOT a group header
+  // AND the previous line is a "jobs" line (we track state)
+  const lines = [];
+  let prevLineIsJobs = false; // true when previous line was jobs content
+
+  for (const line of rawLines) {
+    const isNewMajor = codeRe.test(line);
+    const isNghe = ngheHeaderRe.test(line);
+    const isGroup = isGroupHeader(line);
+
+    if (prevLineIsJobs && !isNewMajor && !isNghe && !isGroup) {
+      // Continuation of jobs from previous line — merge
+      lines[lines.length - 1] = lines[lines.length - 1].trimEnd() + " " + line;
+      // prevLineIsJobs stays true
+    } else {
+      lines.push(line);
+      prevLineIsJobs = isNghe; // only jobs lines start with "Nghề nghiệp tương ứng"
     }
   }
 
-  const parts = [];
-  if (nganhSet.size) {
-    parts.push("Ngành tại NEU");
-    for (const [code, name] of nganhSet) parts.push(`- ${name} (${code})`);
+  // Step 2: Parse into structured items
+  const items = [];
+  let currentMajor = null;
+  let currentJobs = [];
+
+  const flushMajor = () => {
+    if (currentMajor !== null) {
+      // Only emit if there are jobs — otherwise it's a stray header/title line
+      if (currentJobs.length > 0) {
+        const jobStr = currentJobs.join(", ");
+        items.push({ type: "item", title: stripCode(currentMajor), jobs: jobStr });
+      }
+      currentMajor = null;
+      currentJobs = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    if (isGroupHeader(line)) {
+      flushMajor();
+      items.push({ type: "group", title: line });
+      continue;
+    }
+
+    const ngheMatch = line.match(ngheHeaderRe);
+    if (ngheMatch) {
+      const splitIdx = line.search(ngheHeaderRe);
+      const majorPart = line.slice(0, splitIdx).trim();
+      const jobsPart = line.slice(splitIdx + ngheMatch[0].length).trim();
+      if (majorPart) {
+        flushMajor();
+        currentMajor = majorPart;
+      }
+      if (jobsPart) {
+        jobsPart.split(/,/).map((j) => j.trim()).filter(Boolean).forEach((j) => currentJobs.push(j));
+      }
+      continue;
+    }
+
+    const hasCode = codeRe.test(line);
+    if (hasCode) {
+      flushMajor();
+      currentMajor = line;
+      continue;
+    }
+
+    // Plain continuation: append to current jobs
+    if (currentMajor !== null) {
+      line.split(/,/).map((j) => j.trim()).filter(Boolean).forEach((j) => currentJobs.push(j));
+    } else {
+      flushMajor();
+      currentMajor = line;
+    }
   }
-  if (ngheSet.size) {
-    parts.push("");
-    parts.push("Nghề nghiệp tương ứng");
-    for (const job of ngheSet) parts.push(`- ${job}`);
+  flushMajor();
+
+  // Step 3: Render to "Tên ngành: Nghề1, Nghề2" lines
+  const output = [];
+  for (const item of items) {
+    if (item.type === "group") {
+      output.push(`\n${item.title}`);
+    } else {
+      const line = item.jobs ? `${item.title}: ${item.jobs}` : item.title;
+      output.push(line);
+    }
   }
-  parts.push("");
-  parts.push("Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.");
-  return parts.join("\n").trim();
+
+  return output.join("\n").trim();
 }
 
 function normalizeSections(sections) {
@@ -404,20 +458,13 @@ async function extractSectionsWithAI(text, mbtiType) {
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. " +
             "Mỗi ý trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách).\n\n" +
 
-            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề trong tài liệu. " +
-            "Tài liệu có thể tổ chức theo nhiều lĩnh vực con, nhóm ngành — hãy gom tất cả lại. " +
-            "Định dạng output theo cấu trúc sau (chỉ text thuần, không markdown):\n" +
-            "Ngành tại NEU\n" +
-            "- Tên ngành đầy đủ (Mã ngành)\n" +
-            "- Tên ngành đầy đủ (Mã ngành)\n" +
-            "... (liệt kê hết tất cả ngành, mỗi ngành một dòng bắt đầu bằng '- ')\n" +
-            "\n" +
-            "Nghề nghiệp tương ứng\n" +
-            "- Tên nghề\n" +
-            "... (mỗi nghề một dòng bắt đầu bằng '- ')\n" +
-            "\n" +
-            "Hy vọng có thể giúp bạn lựa chọn được định hướng phù hợp.\n\n" +
-            "TUYỆT ĐỐI không để lại: số thứ tự (6.1, 6.2.1...), tiêu đề lĩnh vực/nhóm ngành, từ 'Nghề nghiệp tương ứng:' inline sau tên ngành.\n\n" +
+            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề tương ứng trong tài liệu. " +
+            "Nếu tài liệu có tiêu đề nhóm ngành/lĩnh vực (ví dụ: 'Lĩnh vực Kinh doanh', 'Nhóm ngành Kinh tế'), GIỮ nguyên dòng đó như tiêu đề nhóm. " +
+            "Với mỗi ngành, xuất ĐÚNG 1 dòng theo format: Tên ngành: Nghề1, Nghề2, Nghề3\n" +
+            "Ví dụ: Quản trị kinh doanh: Trưởng phòng kinh doanh, Key Account Manager, Chuyên viên marketing\n" +
+            "TUYỆT ĐỐI KHÔNG dùng 'Nghề nghiệp tương ứng:' trên dòng riêng. " +
+            "TUYỆT ĐỐI KHÔNG tách thành 2 danh sách riêng. " +
+            "Không để số thứ tự (6.1, 6.2.1...) và không giữ mã ngành trong ngoặc.\n\n" +
 
             "## TÀI LIỆU\n" +
             text,

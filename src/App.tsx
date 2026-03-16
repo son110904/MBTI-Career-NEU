@@ -357,22 +357,166 @@ function renderDimensionAnalysis(value: SectionValue) {
 }
 
 function renderNganhNghe(value: SectionValue) {
-  const lines = toLines(value);
+  const stripBulletPrefix = (line: string) => line.replace(/^[-–•]\s+/, "").trim();
+  const lines = toLines(value).map(stripBulletPrefix).filter(Boolean);
   if (!lines.length) return null;
-  return (
-    <div className="space-y-1">
-      {lines.map((line, idx) => {
-        const normalized = normalizeForMatch(line);
-        const isHeading =
-          normalized.startsWith("nganh tai neu") ||
-          normalized.startsWith("nghe nghiep tuong ung") ||
-          normalized.startsWith("nganh, nghe tuong ung");
-        return (
+
+  const normalizedLines = lines.map(normalizeForMatch);
+  const hasOldHeading =
+    normalizedLines.some((line) => line === "nganh tai neu") &&
+    normalizedLines.some((line) => line === "nghe nghiep tuong ung");
+  const hasInlineJobs = lines.some((line) =>
+    /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]/i.test(line),
+  );
+  if (hasOldHeading && !hasInlineJobs) {
+    return (
+      <div className="space-y-1">
+        {lines.map((line, idx) => {
+          const normalized = normalizeForMatch(line);
+          const isHeading =
+            normalized.startsWith("nganh tai neu") ||
+            normalized.startsWith("nghe nghiep tuong ung") ||
+            normalized.startsWith("nganh, nghe tuong ung");
+          return (
+            <p key={`${idx}-${line}`} className="text-slate-700 leading-relaxed">
+              {isHeading ? <strong>{line}</strong> : line}
+            </p>
+          );
+        })}
+      </div>
+    );
+  }
+
+  const isGroupHeaderLine = (line: string) => {
+    const normalized = normalizeForMatch(line);
+    return (
+      normalized.startsWith("nhom nganh") ||
+      normalized.startsWith("linh vuc") ||
+      normalized.startsWith("khoi nganh") ||
+      normalized.startsWith("nhom linh vuc")
+    );
+  };
+  const jobsHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
+  const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
+  const splitJobs = (text: string) =>
+    text
+      .split(/[,;]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  type NganhItem = { major: string; jobs: string[] };
+  type NganhGroup = { title?: string; items: NganhItem[] };
+
+  const groups: NganhGroup[] = [];
+  let currentGroup: NganhGroup = { title: undefined, items: [] };
+  let currentItem: NganhItem | null = null;
+  let lastWasJobs = false;
+
+  const flushItem = () => {
+    if (currentItem && (currentItem.major || currentItem.jobs.length)) {
+      currentGroup.items.push(currentItem);
+    }
+    currentItem = null;
+    lastWasJobs = false;
+  };
+  const flushGroup = () => {
+    flushItem();
+    if (currentGroup.title || currentGroup.items.length) groups.push(currentGroup);
+    currentGroup = { title: undefined, items: [] };
+    lastWasJobs = false;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (isGroupHeaderLine(line)) {
+      flushGroup();
+      currentGroup.title = line;
+      continue;
+    }
+
+    if (jobsHeaderRe.test(line)) {
+      const jobsText = line.replace(jobsHeaderRe, "").trim();
+      if (!currentItem) currentItem = { major: "", jobs: [] };
+      if (jobsText) currentItem.jobs.push(...splitJobs(jobsText));
+      lastWasJobs = true;
+      continue;
+    }
+
+    if (codeRe.test(line) && line.includes(":")) {
+      const [majorPart, jobsPartRaw] = line.split(/:(.+)/).map((p) => p.trim());
+      const jobsPart = jobsPartRaw ? jobsPartRaw.trim() : "";
+      flushItem();
+      currentItem = { major: majorPart || line, jobs: jobsPart ? splitJobs(jobsPart) : [] };
+      lastWasJobs = false;
+      continue;
+    }
+
+    const isMajor = codeRe.test(line);
+    if (isMajor) {
+      flushItem();
+      currentItem = { major: line, jobs: [] };
+      lastWasJobs = false;
+      continue;
+    }
+
+    if (currentItem && lastWasJobs) {
+      currentItem.jobs.push(...splitJobs(line));
+      continue;
+    }
+
+    if (currentItem && !currentItem.jobs.length) {
+      currentItem.major = `${currentItem.major} ${line}`.trim();
+      continue;
+    }
+
+    flushItem();
+    currentItem = { major: line, jobs: [] };
+    lastWasJobs = false;
+  }
+  flushGroup();
+
+  if (!groups.length) {
+    return (
+      <div className="space-y-1">
+        {lines.map((line, idx) => (
           <p key={`${idx}-${line}`} className="text-slate-700 leading-relaxed">
-            {isHeading ? <strong>{line}</strong> : line}
+            {line}
           </p>
-        );
-      })}
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map((group, idx) => (
+        <div key={`group-${idx}`} className="space-y-2">
+          {group.title && (
+            <p className="font-semibold text-slate-800">{group.title}</p>
+          )}
+          <div className="space-y-3">
+            {group.items.map((item, itemIdx) => (
+              <div
+                key={`item-${idx}-${itemIdx}`}
+                className="rounded-lg border border-slate-100 bg-slate-50/40 px-3 py-2"
+              >
+                {item.major && (
+                  <p className="font-medium text-slate-800">{item.major}</p>
+                )}
+                {item.jobs.length > 0 && (
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
+                    {item.jobs.map((job, jobIdx) => (
+                      <li key={`job-${idx}-${itemIdx}-${jobIdx}`}>{job}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
