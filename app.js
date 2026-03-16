@@ -297,8 +297,8 @@ function cleanNganhNghe(text) {
     );
   };
 
-  // Strip mã ngành "(7340101)" khỏi tên ngành để hiển thị gọn
-  const stripCode = (line) => line.replace(/\s*\([\d][\w_.]*(?:_[\w.]+)*\)\s*/g, "").trim();
+  // Giữ nguyên mã ngành — ví dụ: "Quản trị kinh doanh (7340101)"
+  const keepCode = (line) => line.trim();
 
   const rawLines = text
     .split("\n")
@@ -340,7 +340,7 @@ function cleanNganhNghe(text) {
       // Only emit if there are jobs — otherwise it's a stray header/title line
       if (currentJobs.length > 0) {
         const jobStr = currentJobs.join(", ");
-        items.push({ type: "item", title: stripCode(currentMajor), jobs: jobStr });
+        items.push({ type: "item", title: keepCode(currentMajor), jobs: jobStr });
       }
       currentMajor = null;
       currentJobs = [];
@@ -458,7 +458,7 @@ async function extractSectionsWithAI(text, mbtiType) {
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. " +
             "Mỗi ý trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách).\n\n" +
 
-            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề tương ứng trong tài liệu. " +
+            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề trong tài liệu. " +
             "Nếu tài liệu có tiêu đề nhóm ngành/lĩnh vực (ví dụ: 'Lĩnh vực Kinh doanh', 'Nhóm ngành Kinh tế'), GIỮ nguyên dòng đó như tiêu đề nhóm. " +
             "Với mỗi ngành, xuất ĐÚNG 1 dòng theo format: Tên ngành: Nghề1, Nghề2, Nghề3\n" +
             "Ví dụ: Quản trị kinh doanh: Trưởng phòng kinh doanh, Key Account Manager, Chuyên viên marketing\n" +
