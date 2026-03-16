@@ -55,7 +55,7 @@ export default function App() {
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
         <div className="mx-auto max-w-2xl px-4 py-3">
           <h1 className="text-lg font-semibold text-slate-800">
-            Trắc nghiệm MBTI 
+            Tư vấn hướng nghiệp
           </h1>
           <p className="text-sm text-slate-500">
             Đại học Kinh tế Quốc dân (NEU)
