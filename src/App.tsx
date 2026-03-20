@@ -11,6 +11,7 @@ export default function App() {
   const [step, setStep] = useState<Step>("intro");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerRecord>({});
+  const [quizNotice, setQuizNotice] = useState<string | null>(null);
 
   const currentQuestion: MBTIQuestion | undefined = MBTI_QUESTIONS[currentIndex];
   const answeredCount = Object.keys(answers).length;
@@ -18,6 +19,7 @@ export default function App() {
 
   const handleAnswer = useCallback((rating: number) => {
     if (!currentQuestion) return;
+    setQuizNotice(null);
     setAnswers((prev) => ({ ...prev, [currentQuestion.id]: rating }));
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex((i) => i + 1);
@@ -26,24 +28,44 @@ export default function App() {
   }, [currentIndex, currentQuestion]);
 
   const goPrev = useCallback(() => {
+    setQuizNotice(null);
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   }, [currentIndex]);
 
   const goNext = useCallback(() => {
+    setQuizNotice(null);
     if (currentIndex < totalQuestions - 1) setCurrentIndex((i) => i + 1);
-    else if (answeredCount === totalQuestions) setStep("result");
-  }, [currentIndex, answeredCount]);
+  }, [currentIndex]);
+
+  const viewResult = useCallback(() => {
+    if (answeredCount === totalQuestions) {
+      setQuizNotice(null);
+      setStep("result");
+      return;
+    }
+
+    const missingIndex = MBTI_QUESTIONS.findIndex((q) => answers[q.id] === undefined);
+    if (missingIndex >= 0) {
+      setQuizNotice(`Hãy hoàn thành câu ${missingIndex + 1} để xem kết quả.`);
+      setCurrentIndex(missingIndex);
+      return;
+    }
+
+    setQuizNotice("Hãy hoàn thành tất cả câu hỏi để xem kết quả.");
+  }, [answeredCount, answers]);
 
   const handleStart = useCallback(() => {
     setStep("quiz");
     setCurrentIndex(0);
     setAnswers({});
+    setQuizNotice(null);
   }, []);
 
   const handleRetry = useCallback(() => {
     setStep("intro");
     setCurrentIndex(0);
     setAnswers({});
+    setQuizNotice(null);
   }, []);
 
   const resultType = step === "result" ? computeMBTI(answers) : null;
@@ -76,9 +98,11 @@ export default function App() {
             progress={progress}
             answers={answers}
             answeredCount={answeredCount}
+            notice={quizNotice}
             onAnswer={handleAnswer}
             onPrev={goPrev}
             onNext={goNext}
+            onViewResult={viewResult}
           />
         )}
 
@@ -130,9 +154,11 @@ function Quiz({
   progress,
   answers,
   answeredCount,
+  notice,
   onAnswer,
   onPrev,
   onNext,
+  onViewResult,
 }: {
   question: MBTIQuestion;
   index: number;
@@ -140,9 +166,11 @@ function Quiz({
   progress: number;
   answers: AnswerRecord;
   answeredCount: number;
+  notice: string | null;
   onAnswer: (rating: number) => void;
   onPrev: () => void;
   onNext: () => void;
+  onViewResult: () => void;
 }) {
   const currentAnswer = answers[question.id];
   const scaleOptions = [
@@ -206,22 +234,39 @@ function Quiz({
         </div>
       </div>
 
-      <div className="mt-6 flex justify-between">
+      {notice && (
+        <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          {notice}
+        </p>
+      )}
+
+      <div className="mt-6 grid grid-cols-3 gap-3">
         <button
           type="button"
           onClick={onPrev}
-          disabled={index === 0}
+          disabled={index === 0 || index === total - 1}
           className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent"
         >
           ← Câu trước
         </button>
         <button
           type="button"
-          onClick={onNext}
-          disabled={index >= total - 1 && answeredCount < total}
-          className="rounded-lg bg-indigo-600 px-4 py-2 font-medium text-white shadow-md transition hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          onClick={onViewResult}
+          className={`rounded-lg px-4 py-2 font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+            answeredCount === total
+              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700 focus:ring-indigo-500"
+              : "border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200 focus:ring-slate-400"
+          }`}
         >
-          {index >= total - 1 ? "Xem kết quả" : "Câu sau →"}
+          Xem kết quả
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={index >= total - 1}
+          className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          Câu sau →
         </button>
       </div>
     </div>
