@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, type CSSProperties } from "react";
 import { MBTI_QUESTIONS, MBTI_TYPE_INFO } from "./mbti-data";
 import type { MBTIQuestion } from "./mbti-data";
 import { computeMBTI, type AnswerRecord } from "./mbti-score";
@@ -146,24 +146,14 @@ function Quiz({
 }) {
   const currentAnswer = answers[question.id];
   const scaleOptions = [
-    { value: 7, tone: "agree", size: 44, label: "Hoàn toàn đồng ý" },
-    { value: 6, tone: "agree", size: 36, label: "Rất đồng ý" },
-    { value: 5, tone: "agree", size: 30, label: "Đồng ý" },
-    { value: 4, tone: "neutral", size: 22, label: "Trung lập" },
-    { value: 3, tone: "disagree", size: 30, label: "Không đồng ý" },
-    { value: 2, tone: "disagree", size: 36, label: "Rất không đồng ý" },
-    { value: 1, tone: "disagree", size: 44, label: "Hoàn toàn không đồng ý" },
+    { value: 7, size: 44, color: "#10b981", glow: "rgba(16, 185, 129, 0.24)", label: "Hoàn toàn đồng ý" },
+    { value: 6, size: 36, color: "#34d399", glow: "rgba(52, 211, 153, 0.22)", label: "Rất đồng ý" },
+    { value: 5, size: 30, color: "#6ee7b7", glow: "rgba(110, 231, 183, 0.22)", label: "Đồng ý" },
+    { value: 4, size: 22, color: "#9ca3af", glow: "rgba(148, 163, 184, 0.2)", label: "Trung lập" },
+    { value: 3, size: 30, color: "#c4b5fd", glow: "rgba(196, 181, 253, 0.22)", label: "Không đồng ý" },
+    { value: 2, size: 36, color: "#a78bfa", glow: "rgba(167, 139, 250, 0.24)", label: "Rất không đồng ý" },
+    { value: 1, size: 44, color: "#8b5cf6", glow: "rgba(139, 92, 246, 0.24)", label: "Hoàn toàn không đồng ý" },
   ] as const;
-  const toneClasses = {
-    agree: "border-emerald-500 text-emerald-700 hover:border-emerald-600",
-    neutral: "border-slate-300 text-slate-500 hover:border-slate-400",
-    disagree: "border-purple-500 text-purple-700 hover:border-purple-600",
-  } as const;
-  const selectedClasses = {
-    agree: "bg-emerald-50 ring-2 ring-emerald-300",
-    neutral: "bg-slate-100 ring-2 ring-slate-300",
-    disagree: "bg-purple-50 ring-2 ring-purple-300",
-  } as const;
 
   return (
     <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
@@ -181,30 +171,39 @@ function Quiz({
         {question.text}
       </p>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <span className="text-sm font-medium text-emerald-600 sm:w-24">
-          Đồng ý
-        </span>
-        <div className="flex flex-1 items-center justify-center gap-3">
+      <div className="likert-shell mt-6">
+        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.08em]">
+          <span className="text-emerald-600">
+            Đồng ý
+          </span>
+          <span className="text-purple-600">
+            Không đồng ý
+          </span>
+        </div>
+        <div
+          role="radiogroup"
+          aria-label="Mức độ đồng ý"
+          className={`likert-scale mt-4 ${currentAnswer ? "is-completed" : ""}`}
+        >
           {scaleOptions.map((option) => (
             <button
               key={option.value}
               type="button"
               onClick={() => onAnswer(option.value)}
+              role="radio"
+              aria-checked={currentAnswer === option.value}
               aria-label={option.label}
               title={option.label}
-              className={`rounded-full border-2 bg-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-                toneClasses[option.tone]
-              } ${
-                currentAnswer === option.value ? selectedClasses[option.tone] : ""
-              }`}
-              style={{ width: option.size, height: option.size }}
+              className={`likert-option ${currentAnswer === option.value ? "is-selected" : ""}`}
+              style={{
+                width: option.size,
+                height: option.size,
+                "--likert-color": option.color,
+                "--likert-glow": option.glow,
+              } as CSSProperties}
             />
           ))}
         </div>
-        <span className="text-sm font-medium text-purple-600 sm:w-24 sm:text-right">
-          Không đồng ý
-        </span>
       </div>
 
       <div className="mt-6 flex justify-between">
