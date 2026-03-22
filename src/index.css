@@ -33,6 +33,7 @@
 .likert-option {
   position: relative;
   z-index: 1;
+  flex: 0 0 auto;
   box-sizing: border-box;
   border-radius: 9999px;
   border: 2px solid var(--likert-color, #9ca3af);
@@ -79,8 +80,18 @@
   transform: scale(1.05);
 }
 
+.likert-scale-card::before {
+  left: 0.75rem;
+  right: 0.75rem;
+}
+
 @media (max-width: 640px) {
   .likert-scale {
     gap: 0.45rem;
+  }
+
+  .likert-scale-card::before {
+    left: 0.5rem;
+    right: 0.5rem;
   }
 }

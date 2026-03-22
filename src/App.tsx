@@ -4,104 +4,103 @@ import type { MBTIQuestion } from "./mbti-data";
 import { computeMBTI, type AnswerRecord } from "./mbti-score";
 
 type Step = "intro" | "quiz" | "result";
+type SectionValue = string | string[];
 
 const totalQuestions = MBTI_QUESTIONS.length;
+const API_BASE = (import.meta.env.VITE_API_BASE ?? "https://mbti-career-neu.vercel.app").replace(/\/$/, "");
+const BULLET_SECTION_KEYS = new Set(["diem_manh", "diem_yeu", "moi_truong"]);
+const QUIZ_SCALE_OPTIONS = [
+  { value: 7, size: 38, color: "#059669", glow: "rgba(5, 150, 105, 0.24)", label: "Hoàn toàn đồng ý" },
+  { value: 6, size: 32, color: "#10b981", glow: "rgba(16, 185, 129, 0.22)", label: "Rất đồng ý" },
+  { value: 5, size: 26, color: "#6ee7b7", glow: "rgba(110, 231, 183, 0.2)", label: "Đồng ý" },
+  { value: 4, size: 20, color: "#94a3b8", glow: "rgba(148, 163, 184, 0.2)", label: "Trung lập" },
+  { value: 3, size: 26, color: "#c4b5fd", glow: "rgba(196, 181, 253, 0.22)", label: "Không đồng ý" },
+  { value: 2, size: 32, color: "#a78bfa", glow: "rgba(167, 139, 250, 0.24)", label: "Rất không đồng ý" },
+  { value: 1, size: 38, color: "#8b5cf6", glow: "rgba(139, 92, 246, 0.24)", label: "Hoàn toàn không đồng ý" },
+] as const;
 
 export default function App() {
   const [step, setStep] = useState<Step>("intro");
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerRecord>({});
   const [quizNotice, setQuizNotice] = useState<string | null>(null);
+  const [showMissingState, setShowMissingState] = useState(false);
 
-  const currentQuestion: MBTIQuestion | undefined = MBTI_QUESTIONS[currentIndex];
   const answeredCount = Object.keys(answers).length;
   const progress = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
-  const handleAnswer = useCallback((rating: number) => {
-    if (!currentQuestion) return;
-    setQuizNotice(null);
-    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: rating }));
-    if (currentIndex < totalQuestions - 1) {
-      setCurrentIndex((i) => i + 1);
-    }
-    // Nếu đang ở câu cuối, chỉ lưu đáp án, chờ người dùng bấm nút "Xem kết quả"
-  }, [currentIndex, currentQuestion]);
-
-  const goPrev = useCallback(() => {
-    setQuizNotice(null);
-    if (currentIndex > 0) setCurrentIndex((i) => i - 1);
-  }, [currentIndex]);
-
-  const goNext = useCallback(() => {
-    setQuizNotice(null);
-    if (currentIndex < totalQuestions - 1) setCurrentIndex((i) => i + 1);
-  }, [currentIndex]);
-
-  const viewResult = useCallback(() => {
+  useEffect(() => {
     if (answeredCount === totalQuestions) {
       setQuizNotice(null);
-      setStep("result");
+    }
+  }, [answeredCount]);
+
+  const scrollToQuestion = useCallback((questionId: string) => {
+    const questionNode = document.getElementById(`question-${questionId}`);
+    questionNode?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const handleAnswer = useCallback((questionId: string, rating: number) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: rating }));
+    setQuizNotice(null);
+  }, []);
+
+  const viewResult = useCallback(() => {
+    const missingIds = MBTI_QUESTIONS.filter((question) => answers[question.id] === undefined).map(
+      (question) => question.id,
+    );
+
+    if (missingIds.length > 0) {
+      setShowMissingState(true);
+      setQuizNotice(`Bạn còn ${missingIds.length} câu chưa trả lời. Hãy hoàn thành đầy đủ trước khi xem kết quả.`);
+      scrollToQuestion(missingIds[0]);
       return;
     }
 
-    const missingIndex = MBTI_QUESTIONS.findIndex((q) => answers[q.id] === undefined);
-    if (missingIndex >= 0) {
-      setQuizNotice(`Hãy hoàn thành câu ${missingIndex + 1} để xem kết quả.`);
-      setCurrentIndex(missingIndex);
-      return;
-    }
-
-    setQuizNotice("Hãy hoàn thành tất cả câu hỏi để xem kết quả.");
-  }, [answeredCount, answers]);
+    setQuizNotice(null);
+    setShowMissingState(false);
+    setStep("result");
+  }, [answers, scrollToQuestion]);
 
   const handleStart = useCallback(() => {
     setStep("quiz");
-    setCurrentIndex(0);
     setAnswers({});
     setQuizNotice(null);
+    setShowMissingState(false);
   }, []);
 
   const handleRetry = useCallback(() => {
     setStep("intro");
-    setCurrentIndex(0);
     setAnswers({});
     setQuizNotice(null);
+    setShowMissingState(false);
   }, []);
 
   const resultType = step === "result" ? computeMBTI(answers) : null;
   const resultInfo = resultType ? MBTI_TYPE_INFO[resultType] : null;
-
+  const mainClassName =
+    step === "quiz" ? "mx-auto max-w-5xl px-4 py-8 sm:px-6" : "mx-auto max-w-3xl px-4 py-8 sm:px-6";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto max-w-2xl px-4 py-3">
-          <h1 className="text-lg font-semibold text-slate-800">
-            Tư vấn hướng nghiệp
-          </h1>
-          <p className="text-sm text-slate-500">
-            Đại học Kinh tế Quốc dân (NEU)
-          </p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.96),_rgba(226,232,240,0.95)_45%,_rgba(241,245,249,1)_100%)] text-slate-900">
+      <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur">
+        <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6">
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Tư vấn hướng nghiệp</h1>
+          <p className="text-sm text-slate-600">Đại học Kinh tế Quốc dân (NEU)</p>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-8">
-        {step === "intro" && (
-          <Intro onStart={handleStart} />
-        )}
+      <main className={mainClassName}>
+        {step === "intro" && <Intro onStart={handleStart} />}
 
-        {step === "quiz" && currentQuestion && (
+        {step === "quiz" && (
           <Quiz
-            question={currentQuestion}
-            index={currentIndex}
-            total={totalQuestions}
-            progress={progress}
+            questions={MBTI_QUESTIONS}
             answers={answers}
             answeredCount={answeredCount}
+            progress={progress}
             notice={quizNotice}
+            showMissingState={showMissingState}
             onAnswer={handleAnswer}
-            onPrev={goPrev}
-            onNext={goNext}
             onViewResult={viewResult}
           />
         )}
@@ -111,7 +110,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="mt-12 border-t border-slate-200 py-4 text-center text-sm text-slate-500">
+      <footer className="mt-12 border-t border-slate-200 py-5 text-center text-sm text-slate-600">
         Công cụ tham khảo, không thay thế tư vấn chuyên nghiệp. © NEU
       </footer>
     </div>
@@ -120,163 +119,232 @@ export default function App() {
 
 function Intro({ onStart }: { onStart: () => void }) {
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
-      <h2 className="text-xl font-semibold text-slate-800">
-        Khám phá tính cách & nghề nghiệp phù hợp
-      </h2>
-      <p className="mt-3 text-slate-600">
-        Bài trắc nghiệm MBTI gồm <strong>{totalQuestions} câu</strong>, mỗi câu được đánh giá
-        theo thang Likert 7 mức từ "hoàn toàn không đồng ý" đến "hoàn toàn đồng ý".
-        Kết quả giúp bạn nhận diện 4 chiều tính cách
-        (Hướng ngoại – Hướng nội, Giác quan – Trực giác, Lý trí – Cảm xúc, Nguyên tắc – Linh hoạt)
-        và gợi ý hướng nghề nghiệp phù hợp với sinh viên Đại học Kinh tế Quốc dân.
-      </p>
-      <ul className="mt-4 list-inside list-disc space-y-1 text-sm text-slate-600">
-        <li>Chọn câu trả lời gần với cách bạn thường nghĩ hoặc hành động nhất.</li>
-        <li>Không có đáp án đúng/sai – hãy trả lời trung thực.</li>
-        <li>Kết quả bao gồm gợi ý nghề nghiệp và ngành học phù hợp NEU.</li>
-      </ul>
-      <button
-        type="button"
-        onClick={onStart}
-        className="mt-6 w-full rounded-xl bg-indigo-600 px-4 py-3 font-medium text-white shadow-md transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-      >
-        Bắt đầu làm bài
-      </button>
-    </div>
+    <section className="relative overflow-hidden rounded-[2rem] bg-white px-6 py-8 text-slate-900 shadow-[0_24px_80px_rgba(15,23,42,0.08)] ring-1 ring-slate-200 sm:px-8 sm:py-10">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(99,102,241,0.12),_transparent_34%),radial-gradient(circle_at_bottom_left,_rgba(14,165,233,0.08),_transparent_30%)]" />
+      <div className="relative space-y-6">
+        <div className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">
+          MBTI Career Match
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="max-w-2xl text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">
+            Khám phá tính cách và nhóm nghề phù hợp với bạn tại NEU.
+          </h2>
+          <p className="max-w-2xl text-base leading-7 text-slate-700 sm:text-lg">
+            Bài trắc nghiệm gồm <strong className="font-semibold text-slate-900">{totalQuestions} câu hỏi</strong>,
+            hiển thị trên cùng một trang để bạn dễ quan sát, trả lời linh hoạt và rà soát lại trước khi xem kết quả.
+          </p>
+        </div>
+
+        <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cách làm</p>
+            <p className="mt-2 leading-6">Chọn mức độ đồng ý cho từng câu theo thang 7 mức</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Trải nghiệm</p>
+            <p className="mt-2 leading-6">Hãy trả lời đầy đủ 20 câu để được nhận tư vấn</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Kết quả</p>
+            <p className="mt-2 leading-6">Hệ thống phân tích 4 chiều MBTI và gợi ý môi trường học tập, nghề nghiệp phù hợp.</p>
+          </div>
+        </div>
+
+        <ul className="space-y-2 text-sm leading-6 text-slate-700">
+          <li>Chọn câu trả lời gần nhất với cách bạn thường suy nghĩ hoặc hành động.</li>
+          <li>Không có đáp án đúng hoặc sai, nên hãy trả lời trung thực và nhất quán.</li>
+          <li>Bạn chỉ xem được kết quả khi đã hoàn thành đầy đủ toàn bộ câu hỏi.</li>
+        </ul>
+
+        <button
+          type="button"
+          onClick={onStart}
+          className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white sm:w-auto"
+        >
+          Bắt đầu làm bài
+        </button>
+      </div>
+    </section>
   );
 }
 
 function Quiz({
-  question,
-  index,
-  total,
-  progress,
+  questions,
   answers,
   answeredCount,
+  progress,
   notice,
+  showMissingState,
   onAnswer,
-  onPrev,
-  onNext,
   onViewResult,
 }: {
-  question: MBTIQuestion;
-  index: number;
-  total: number;
-  progress: number;
+  questions: MBTIQuestion[];
   answers: AnswerRecord;
   answeredCount: number;
+  progress: number;
   notice: string | null;
-  onAnswer: (rating: number) => void;
-  onPrev: () => void;
-  onNext: () => void;
+  showMissingState: boolean;
+  onAnswer: (questionId: string, rating: number) => void;
   onViewResult: () => void;
 }) {
-  const currentAnswer = answers[question.id];
-  const scaleOptions = [
-    { value: 7, size: 44, color: "#10b981", glow: "rgba(16, 185, 129, 0.24)", label: "Hoàn toàn đồng ý" },
-    { value: 6, size: 36, color: "#34d399", glow: "rgba(52, 211, 153, 0.22)", label: "Rất đồng ý" },
-    { value: 5, size: 30, color: "#6ee7b7", glow: "rgba(110, 231, 183, 0.22)", label: "Đồng ý" },
-    { value: 4, size: 22, color: "#9ca3af", glow: "rgba(148, 163, 184, 0.2)", label: "Trung lập" },
-    { value: 3, size: 30, color: "#c4b5fd", glow: "rgba(196, 181, 253, 0.22)", label: "Không đồng ý" },
-    { value: 2, size: 36, color: "#a78bfa", glow: "rgba(167, 139, 250, 0.24)", label: "Rất không đồng ý" },
-    { value: 1, size: 44, color: "#8b5cf6", glow: "rgba(139, 92, 246, 0.24)", label: "Hoàn toàn không đồng ý" },
-  ] as const;
+  const remainingCount = questions.length - answeredCount;
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
-      <div className="mb-4 flex items-center justify-between text-sm text-slate-500">
-        <span>Câu {index + 1} / {total}</span>
-        <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-200">
-          <div
-            className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+    <div className="space-y-6">
+      <section className="rounded-[1.75rem] bg-white/95 p-5 shadow-sm ring-1 ring-slate-200/80 sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl space-y-2">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Danh sách câu hỏi</p>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Hoàn thành toàn bộ câu hỏi trên một trang</h2>
+            <p className="text-sm leading-6 text-slate-600 sm:text-base">
+              Chọn đáp án trực tiếp trên từng dòng câu hỏi. Hệ thống không tự chuyển câu và chỉ cho xem kết quả khi bạn đã trả lời đủ.
+            </p>
+          </div>
 
-      <p className="text-lg font-medium text-slate-800">
-        {question.text}
-      </p>
-
-      <div className="likert-shell mt-6">
-        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.08em]">
-          <span className="text-emerald-600">
-            Đồng ý
-          </span>
-          <span className="text-purple-600">
-            Không đồng ý
-          </span>
+          <div className="grid grid-cols-2 gap-3 sm:min-w-[300px]">
+            <SummaryStat label="Đã trả lời" value={`${answeredCount}/${questions.length}`} tone="emerald" />
+            <SummaryStat label="Còn lại" value={`${remainingCount}`} tone="amber" />
+          </div>
         </div>
-        <div
-          role="radiogroup"
-          aria-label="Mức độ đồng ý"
-          className={`likert-scale mt-4 ${currentAnswer ? "is-completed" : ""}`}
-        >
-          {scaleOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onAnswer(option.value)}
-              role="radio"
-              aria-checked={currentAnswer === option.value}
-              aria-label={option.label}
-              title={option.label}
-              className={`likert-option ${currentAnswer === option.value ? "is-selected" : ""}`}
-              style={{
-                width: option.size,
-                height: option.size,
-                "--likert-color": option.color,
-                "--likert-glow": option.glow,
-              } as CSSProperties}
+
+        <div className="mt-5">
+          <div className="flex items-center justify-between text-sm font-medium text-slate-600">
+            <span>Tiến độ hoàn thành</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,#0f766e_0%,#14b8a6_35%,#6366f1_100%)] transition-all duration-300"
+              style={{ width: `${progress}%` }}
             />
-          ))}
+          </div>
         </div>
+
+        {notice && (
+          <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+            {notice}
+          </p>
+        )}
+      </section>
+
+      <div className="space-y-4">
+        {questions.map((question, index) => {
+          const currentAnswer = answers[question.id];
+          const isMissing = showMissingState && currentAnswer === undefined;
+
+          return (
+            <article
+              key={question.id}
+              id={`question-${question.id}`}
+              className={`rounded-[1.5rem] border bg-white p-5 shadow-sm transition sm:p-6 ${
+                isMissing
+                  ? "border-amber-300 shadow-[0_12px_40px_rgba(245,158,11,0.12)]"
+                  : "border-slate-200/80"
+              }`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white">
+                      Câu {index + 1}
+                    </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${
+                        currentAnswer === undefined ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {currentAnswer === undefined ? "Chưa trả lời" : "Đã trả lời"}
+                    </span>
+                  </div>
+                  <p className="max-w-3xl text-lg font-semibold leading-8 text-slate-900">{question.text}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-[1.25rem] bg-slate-50 px-4 py-4 ring-1 ring-slate-200/80 sm:px-5">
+                <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.16em] sm:text-xs">
+                  <span className="text-emerald-700">Đồng ý</span>
+                  <span className="text-violet-700">Không đồng ý</span>
+                </div>
+                <div
+                  role="radiogroup"
+                  aria-label={`Mức độ đồng ý cho câu ${index + 1}`}
+                  className={`likert-scale likert-scale-card mt-4 ${currentAnswer !== undefined ? "is-completed" : ""}`}
+                >
+                  {QUIZ_SCALE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => onAnswer(question.id, option.value)}
+                      role="radio"
+                      aria-checked={currentAnswer === option.value}
+                      aria-label={`${option.label} cho câu ${index + 1}`}
+                      title={option.label}
+                      className={`likert-option ${currentAnswer === option.value ? "is-selected" : ""}`}
+                      style={
+                        {
+                          width: option.size,
+                          height: option.size,
+                          "--likert-color": option.color,
+                          "--likert-glow": option.glow,
+                        } as CSSProperties
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {isMissing && <p className="mt-3 text-sm font-medium text-amber-700">Câu này chưa được trả lời.</p>}
+            </article>
+          );
+        })}
       </div>
 
-      {notice && (
-        <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-          {notice}
-        </p>
-      )}
+      <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-lg font-semibold">Sẵn sàng xem kết quả?</p>
+            <p className="text-sm text-slate-600">
+              {remainingCount === 0
+                ? "Bạn đã hoàn thành toàn bộ câu hỏi. Có thể xem kết quả ngay."
+                : `Bạn còn ${remainingCount} câu chưa trả lời. Nút xem kết quả sẽ đưa bạn tới câu còn thiếu.`}
+            </p>
+          </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
-        <button
-          type="button"
-          onClick={onPrev}
-          disabled={index === 0 || index === total - 1}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent"
-        >
-          ← Câu trước
-        </button>
-        <button
-          type="button"
-          onClick={onViewResult}
-          className={`rounded-lg px-4 py-2 font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-            answeredCount === total
-              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700 focus:ring-indigo-500"
-              : "border border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200 focus:ring-slate-400"
-          }`}
-        >
-          Xem kết quả
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={index >= total - 1}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-transparent"
-        >
-          Câu sau →
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={onViewResult}
+            className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white"
+          >
+            Xem kết quả
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
 
-type SectionValue = string | string[];
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "emerald" | "amber";
+}) {
+  const toneClassName =
+    tone === "emerald"
+      ? "bg-emerald-50 text-emerald-800 ring-emerald-100"
+      : "bg-amber-50 text-amber-800 ring-amber-100";
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "https://mbti-career-neu.vercel.app").replace(/\/$/, "");
-const BULLET_SECTION_KEYS = new Set(["diem_manh", "diem_yeu", "moi_truong"]);
+  return (
+    <div className={`rounded-2xl px-4 py-4 ring-1 ${toneClassName}`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em]">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+    </div>
+  );
+}
 
 function normalizeForMatch(input: string) {
   return input
@@ -327,14 +395,12 @@ function formatDimensionLine(line: string) {
   const trimmed = line.trim();
   if (!trimmed) return "";
 
-  // Already formatted: "Dim – (VN): ..."
   const formattedMatch = trimmed.match(/^([A-Za-z]+)\s*[-–—]\s*\(([^)]+)\)\s*:\s*(.+)$/);
   if (formattedMatch) {
     const [, dim, vn, rest] = formattedMatch;
     return `${dim} – (${vn.trim()}): ${rest.trim()}`;
   }
 
-  // Match: "Dim – VN ..."
   const match = trimmed.match(/^([A-Za-z]+)\s*[-–—]\s*(.+)$/);
   if (!match) return trimmed;
 
@@ -342,7 +408,6 @@ function formatDimensionLine(line: string) {
   const rest = restRaw.trim();
   if (!rest) return trimmed;
 
-  // If rest starts with a parenthetical, keep original
   if (rest.startsWith("(")) return `${dim} – ${rest}`;
 
   const words = rest.split(/\s+/).filter(Boolean);
@@ -386,13 +451,11 @@ function renderDimensionAnalysis(value: SectionValue) {
   if (lines.length <= 1) {
     lines = toBullets(value);
   }
-  const normalized = lines
-    .map(formatDimensionLine)
-    .filter(Boolean);
+  const normalized = lines.map(formatDimensionLine).filter(Boolean);
 
   if (!normalized.length) return null;
   return (
-    <ul className="list-disc space-y-1 pl-5 text-slate-700 leading-relaxed">
+    <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-700">
       {normalized.map((item, idx) => (
         <li key={`dim-${idx}`}>{item}</li>
       ))}
@@ -409,9 +472,7 @@ function renderNganhNghe(value: SectionValue) {
   const hasOldHeading =
     normalizedLines.some((line) => line === "nganh tai neu") &&
     normalizedLines.some((line) => line === "nghe nghiep tuong ung");
-  const hasInlineJobs = lines.some((line) =>
-    /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]/i.test(line),
-  );
+  const hasInlineJobs = lines.some((line) => /Nghề\s+nghiệp\s+tương\s+ứng\s*[:\-]/i.test(line));
   if (hasOldHeading && !hasInlineJobs) {
     return (
       <div className="space-y-1">
@@ -422,7 +483,7 @@ function renderNganhNghe(value: SectionValue) {
             normalized.startsWith("nghe nghiep tuong ung") ||
             normalized.startsWith("nganh, nghe tuong ung");
           return (
-            <p key={`${idx}-${line}`} className="text-slate-700 leading-relaxed">
+            <p key={`${idx}-${line}`} className="leading-relaxed text-slate-700">
               {isHeading ? <strong>{line}</strong> : line}
             </p>
           );
@@ -440,7 +501,7 @@ function renderNganhNghe(value: SectionValue) {
       normalized.startsWith("nhom linh vuc")
     );
   };
-  const jobsHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
+  const jobsHeaderRe = /Nghề\s+nghiệp\s+tương\s+ứng\s*[:\-]?\s*/i;
   const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
   const splitJobs = (text: string) =>
     text
@@ -489,7 +550,7 @@ function renderNganhNghe(value: SectionValue) {
     }
 
     if (codeRe.test(line) && line.includes(":")) {
-      const [majorPart, jobsPartRaw] = line.split(/:(.+)/).map((p) => p.trim());
+      const [majorPart, jobsPartRaw] = line.split(/:(.+)/).map((part) => part.trim());
       const jobsPart = jobsPartRaw ? jobsPartRaw.trim() : "";
       flushItem();
       currentItem = { major: majorPart || line, jobs: jobsPart ? splitJobs(jobsPart) : [] };
@@ -525,7 +586,7 @@ function renderNganhNghe(value: SectionValue) {
     return (
       <div className="space-y-1">
         {lines.map((line, idx) => (
-          <p key={`${idx}-${line}`} className="text-slate-700 leading-relaxed">
+          <p key={`${idx}-${line}`} className="leading-relaxed text-slate-700">
             {line}
           </p>
         ))}
@@ -537,18 +598,14 @@ function renderNganhNghe(value: SectionValue) {
     <div className="space-y-4">
       {groups.map((group, idx) => (
         <div key={`group-${idx}`} className="space-y-2">
-          {group.title && (
-            <p className="font-semibold text-slate-800">{group.title}</p>
-          )}
+          {group.title && <p className="font-semibold text-slate-800">{group.title}</p>}
           <div className="space-y-3">
             {group.items.map((item, itemIdx) => (
               <div
                 key={`item-${idx}-${itemIdx}`}
                 className="rounded-lg border border-slate-100 bg-slate-50/40 px-3 py-2"
               >
-                {item.major && (
-                  <p className="font-medium text-slate-800">{item.major}</p>
-                )}
+                {item.major && <p className="font-medium text-slate-800">{item.major}</p>}
                 {item.jobs.length > 0 && (
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
                     {item.jobs.map((job, jobIdx) => (
@@ -575,7 +632,7 @@ function renderSectionContent(key: string, value: SectionValue) {
   if (BULLET_SECTION_KEYS.has(key)) {
     const bullets = toBullets(value);
     return (
-      <ul className="list-disc space-y-1 pl-5 text-slate-700 leading-relaxed">
+      <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-700">
         {bullets.map((item, idx) => (
           <li key={`${key}-${idx}`}>{item}</li>
         ))}
@@ -583,7 +640,7 @@ function renderSectionContent(key: string, value: SectionValue) {
     );
   }
   return (
-    <p className="whitespace-pre-wrap text-slate-700 leading-relaxed">
+    <p className="whitespace-pre-wrap leading-relaxed text-slate-700">
       {Array.isArray(value) ? value.join("\n") : value}
     </p>
   );
@@ -610,7 +667,9 @@ function Result({
     setConsultationSections(null);
     fetch(`${API_BASE}/api/ai-consultation?mbtiType=${encodeURIComponent(mbtiType)}`)
       .then((res) => {
-        if (!res.ok) throw new Error(res.status === 404 ? "Chưa có dữ liệu tư vấn cho tính cách này." : "Tải tư vấn thất bại.");
+        if (!res.ok) {
+          throw new Error(res.status === 404 ? "Chưa có dữ liệu tư vấn cho tính cách này." : "Tải tư vấn thất bại.");
+        }
         return res.json();
       })
       .then((data) => {
@@ -635,18 +694,13 @@ function Result({
     <div className="space-y-6">
       <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="rounded-xl bg-indigo-100 px-4 py-2 text-2xl font-bold text-indigo-800">
-            {type}
-          </span>
+          <span className="rounded-xl bg-indigo-100 px-4 py-2 text-2xl font-bold text-indigo-800">{type}</span>
           <h2 className="text-xl font-semibold text-slate-800">{nameVi}</h2>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {traits.map((t) => (
-            <span
-              key={t}
-              className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600"
-            >
-              {t}
+          {traits.map((trait) => (
+            <span key={trait} className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+              {trait}
             </span>
           ))}
         </div>
@@ -663,14 +717,7 @@ function Result({
               viewBox="0 0 24 24"
               aria-hidden
             >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path
                 className="opacity-75"
                 fill="currentColor"
@@ -704,9 +751,7 @@ function Result({
           </div>
         )}
         {!consultationLoading && !consultationSections && consultationText && (
-          <p className="mt-3 whitespace-pre-wrap text-slate-700 leading-relaxed">
-            {consultationText}
-          </p>
+          <p className="mt-3 whitespace-pre-wrap leading-relaxed text-slate-700">{consultationText}</p>
         )}
       </div>
 
