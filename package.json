@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "pack": "npm run build && node scripts/pack.mjs",
+    "pack:basepath": "npm run pack",
     "pack:full": "npm run build && node scripts/pack-full.mjs",
     "start": "node server.js",
     "preview": "vite preview"

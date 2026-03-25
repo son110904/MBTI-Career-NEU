@@ -1,7 +1,4 @@
-﻿/**
- * Express app (API only) for MBTI-Career-NEU
- * This file is used by both local server and Vercel serverless.
- */
+﻿
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -13,7 +10,7 @@ dotenv.config();
 
 const app = express();
 
-/* ------------------------------- Middleware ------------------------------ */
+
 app.use(cors());
 app.use(express.json());
 
@@ -24,7 +21,7 @@ const MBTI_TYPES = [
   "ISTP", "ISFP", "ESTP", "ESFP",
 ];
 
-/* ------------------------------ MinIO Client ----------------------------- */
+
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || "203.113.132.48";
 const MINIO_PORT = parseInt(process.env.MINIO_PORT || "8008", 10);
 const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY || "course2";
@@ -133,9 +130,22 @@ const SECTION_DEFS = [
       "Ý NGHĨA CÁC CHIỀU TÍNH CÁCH", "Y NGHIA CAC CHIEU TINH CACH",
     ],
   },
-  { key: "diem_manh", labels: ["ĐIỂM MẠNH", "DIEM MANH", "UU DIEM"] },
-  { key: "diem_yeu", labels: ["ĐIỂM YẾU", "DIEM YEU", "HẠN CHẾ", "HAN CHE", "NHUOC DIEM"] },
-  { key: "moi_truong", labels: ["MÔI TRƯỜNG", "MOI TRUONG", "MOI TRUONG LAM VIEC PHU HOP"] },
+  { key: "diem_manh", labels: [
+    "ĐIỂM MẠNH", "DIEM MANH", "ƯU ĐIỂM", "UU DIEM",
+    "ĐIỂM MẠNH NỔI BẬT", "DIEM MANH NOI BAT",
+    "3. ĐIỂM MẠNH", "3 DIEM MANH",
+  ] },
+  { key: "diem_yeu", labels: [
+    "ĐIỂM YẾU", "DIEM YEU", "HẠN CHẾ", "HAN CHE",
+    "NHƯỢC ĐIỂM", "NHUOC DIEM", "ĐIỂM HẠN CHẾ", "DIEM HAN CHE",
+    "4. HẠN CHẾ", "4 HAN CHE",
+  ] },
+  { key: "moi_truong", labels: [
+    "MÔI TRƯỜNG", "MOI TRUONG",
+    "MÔI TRƯỜNG LÀM VIỆC PHÙ HỢP", "MOI TRUONG LAM VIEC PHU HOP",
+    "MÔI TRƯỜNG PHÙ HỢP", "MOI TRUONG PHU HOP",
+    "5. MÔI TRƯỜNG", "5 MOI TRUONG",
+  ] },
   {
     key: "nganh_nghe_tuong_ung",
     labels: [
@@ -157,9 +167,20 @@ const LABEL_TO_KEY = (() => {
 
 function normalizeHeading(input) {
   if (!input) return "";
-  return input
-    .replace(/^[\s\dIVXLCDM\.\)\-]+/gi, "")
-    .replace(/^[\s\d]+(\.[\s\d]+)*\.\s*/g, "")
+
+  let s = input.trim();
+  s = s
+    .replace(/^(\d+\.)+\s+/, "")          // "1. " / "1.2. "
+    .replace(/^(\d+\.)+\d+\s+/, "")       // "1.2.3 "
+    .replace(/^\(\d+\)\s+/, "")            // "(1) "
+    .replace(/^[IVXLCDM]+\.\s+/i, "")      // "I. " "II. " — requires trailing dot+space
+    .replace(/^\d+[)\]]\s+/, "")           // "1) "
+    .replace(/^[-\u2013\u2022]\s+/, "");   // "- " "• "
+
+
+  s = s.replace(/[\u0111]/g, "d").replace(/[\u0110]/g, "D");
+
+  return s
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^\p{L}\p{N} ]/gu, " ")
@@ -245,10 +266,7 @@ function extractSectionsByHeadings(text) {
   return sections;
 }
 
-/**
- * Strip leading bullets/numbering from a single line.
- * Removes patterns like: 1. / 1) / (1) / - / • / 6.1.2.3
- */
+
 function stripLeadingNumber(line) {
   return line
     .replace(/^\s*(\d+\.)+\d*\s+/g, "")
@@ -258,10 +276,6 @@ function stripLeadingNumber(line) {
     .replace(/^\s*[-–•]\s+/g, "");
 }
 
-/**
- * Clean generic section text: remove leading numbers/bullets from every line,
- * collapse multiple blank lines, trim.
- */
 function cleanSectionText(text) {
   if (!text) return text;
   return text
@@ -272,17 +286,13 @@ function cleanSectionText(text) {
     .trim();
 }
 
-/**
- * Parse the raw nganh_nghe_tuong_ung block into "Tên ngành: Nghề1, Nghề2" format.
- * Group headers (Lĩnh vực / Nhóm ngành) are preserved as section titles.
- */
+
 function cleanNganhNghe(text) {
   if (!text) return text;
 
   const ngheHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
   const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
 
-  // Use raw Vietnamese text check instead of normalizeHeading (which strips "L" as Roman numeral)
   const isGroupHeader = (line) => {
     const lower = line
       .normalize("NFD")
@@ -297,7 +307,7 @@ function cleanNganhNghe(text) {
     );
   };
 
-  // Giữ nguyên mã ngành — ví dụ: "Quản trị kinh doanh (7340101)"
+
   const keepCode = (line) => line.trim();
 
   const rawLines = text
@@ -306,12 +316,7 @@ function cleanNganhNghe(text) {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  // Step 1: Pre-process — join wrapped continuation lines.
-  // After stripping leading numbers, a continuation line is one that:
-  // - does NOT contain a major code like (7340101)
-  // - does NOT start with "Nghề nghiệp tương ứng"
-  // - is NOT a group header
-  // AND the previous line is a "jobs" line (we track state)
+
   const lines = [];
   let prevLineIsJobs = false; // true when previous line was jobs content
 
@@ -508,10 +513,6 @@ async function extractSectionsWithAI(text, mbtiType) {
   }
 }
 
-/**
- * GET /api/ai-consultation?mbtiType=INTJ
- * Fetches MBTI personality document from MinIO and returns extracted text.
- */
 app.get("/api/ai-consultation", async (req, res) => {
   try {
     const mbtiType = (req.query.mbtiType || "").toUpperCase();

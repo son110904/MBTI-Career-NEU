@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, type CSSProperties } from "react";
 import { MBTI_QUESTIONS, MBTI_TYPE_INFO } from "./mbti-data";
 import type { MBTIQuestion } from "./mbti-data";
-import { computeMBTI, type AnswerRecord } from "./mbti-score";
+import { computeMBTI, computeMBTIScores, type AnswerRecord } from "./mbti-score";
 
 type Step = "intro" | "quiz" | "result";
 type SectionValue = string | string[];
@@ -66,6 +66,7 @@ export default function App() {
     setAnswers({});
     setQuizNotice(null);
     setShowMissingState(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const handleRetry = useCallback(() => {
@@ -73,23 +74,21 @@ export default function App() {
     setAnswers({});
     setQuizNotice(null);
     setShowMissingState(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const resultType = step === "result" ? computeMBTI(answers) : null;
   const resultInfo = resultType ? MBTI_TYPE_INFO[resultType] : null;
   const mainClassName =
-    step === "quiz" ? "mx-auto max-w-5xl px-4 py-8 sm:px-6" : "mx-auto max-w-3xl px-4 py-8 sm:px-6";
+    step === "quiz" ? "mx-auto max-w-5xl px-4 py-8 sm:px-6" : "mx-auto max-w-4xl px-4 py-8 sm:px-6";
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.96),_rgba(226,232,240,0.95)_45%,_rgba(241,245,249,1)_100%)] text-slate-900">
-      <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-4 py-4 sm:px-6">
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Tư vấn hướng nghiệp</h1>
-          <p className="text-sm text-slate-600">Đại học Kinh tế Quốc dân (NEU)</p>
-        </div>
-      </header>
-
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <main className={mainClassName}>
+        <header className="mb-8 text-center">
+          <h1 className="text-2xl font-bold text-slate-800">Trắc nghiệm MBTI hướng nghiệp</h1>
+          <p className="mt-1 text-sm text-slate-600 sm:text-base">Tra cứu nhóm tính cách và gợi ý nghề nghiệp tại NEU</p>
+        </header>
         {step === "intro" && <Intro onStart={handleStart} />}
 
         {step === "quiz" && (
@@ -106,11 +105,11 @@ export default function App() {
         )}
 
         {step === "result" && resultInfo && resultType && (
-          <Result info={resultInfo} mbtiType={resultType} onRetry={handleRetry} />
+          <Result info={resultInfo} mbtiType={resultType} answers={answers} onRetry={handleRetry} />
         )}
       </main>
 
-      <footer className="mt-12 border-t border-slate-200 py-5 text-center text-sm text-slate-600">
+      <footer className="pb-8 text-center text-sm text-slate-500">
         Công cụ tham khảo, không thay thế tư vấn chuyên nghiệp. © NEU
       </footer>
     </div>
@@ -119,18 +118,17 @@ export default function App() {
 
 function Intro({ onStart }: { onStart: () => void }) {
   return (
-    <section className="relative overflow-hidden rounded-[2rem] bg-white px-6 py-8 text-slate-900 shadow-[0_24px_80px_rgba(15,23,42,0.08)] ring-1 ring-slate-200 sm:px-8 sm:py-10">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(99,102,241,0.12),_transparent_34%),radial-gradient(circle_at_bottom_left,_rgba(14,165,233,0.08),_transparent_30%)]" />
-      <div className="relative space-y-6">
-        <div className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-indigo-700">
+    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <div className="space-y-6">
+        <div className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-700">
           MBTI Career Match
         </div>
 
         <div className="space-y-4">
-          <h2 className="max-w-2xl text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">
+          <h2 className="max-w-2xl text-3xl font-semibold leading-tight text-slate-900">
             Khám phá tính cách và nhóm nghề phù hợp với bạn tại NEU.
           </h2>
-          <p className="max-w-2xl text-base leading-7 text-slate-700 sm:text-lg">
+          <p className="max-w-2xl text-base leading-7 text-slate-700">
             Bài trắc nghiệm gồm <strong className="font-semibold text-slate-900">{totalQuestions} câu hỏi</strong>,
             hiển thị trên cùng một trang để bạn dễ quan sát, trả lời linh hoạt và rà soát lại trước khi xem kết quả.
           </p>
@@ -160,7 +158,7 @@ function Intro({ onStart }: { onStart: () => void }) {
         <button
           type="button"
           onClick={onStart}
-          className="inline-flex w-full items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3.5 text-base font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white sm:w-auto"
+          className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-5 py-3 text-base font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white sm:w-auto"
         >
           Bắt đầu làm bài
         </button>
@@ -192,7 +190,7 @@ function Quiz({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[1.75rem] bg-white/95 p-5 shadow-sm ring-1 ring-slate-200/80 sm:p-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl space-y-2">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Danh sách câu hỏi</p>
@@ -202,7 +200,7 @@ function Quiz({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:min-w-[300px]">
+          <div className="grid grid-cols-2 gap-3 sm:min-w-[280px]">
             <SummaryStat label="Đã trả lời" value={`${answeredCount}/${questions.length}`} tone="emerald" />
             <SummaryStat label="Còn lại" value={`${remainingCount}`} tone="amber" />
           </div>
@@ -237,10 +235,10 @@ function Quiz({
             <article
               key={question.id}
               id={`question-${question.id}`}
-              className={`rounded-[1.5rem] border bg-white p-5 shadow-sm transition sm:p-6 ${
+              className={`rounded-xl border bg-white p-5 shadow-sm transition sm:p-6 ${
                 isMissing
                   ? "border-amber-300 shadow-[0_12px_40px_rgba(245,158,11,0.12)]"
-                  : "border-slate-200/80"
+                  : "border-slate-200"
               }`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -261,7 +259,7 @@ function Quiz({
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[1.25rem] bg-slate-50 px-4 py-4 ring-1 ring-slate-200/80 sm:px-5">
+              <div className="mt-5 rounded-lg bg-slate-50 px-4 py-4 ring-1 ring-slate-200 sm:px-5" style={{ overflow: "visible" }}>
                 <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.16em] sm:text-xs">
                   <span className="text-emerald-700">Đồng ý</span>
                   <span className="text-violet-700">Không đồng ý</span>
@@ -300,7 +298,7 @@ function Quiz({
         })}
       </div>
 
-      <section className="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-slate-900 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <p className="text-lg font-semibold">Sẵn sàng xem kết quả?</p>
@@ -314,7 +312,7 @@ function Quiz({
           <button
             type="button"
             onClick={onViewResult}
-            className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-600/20 transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white"
+            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white"
           >
             Xem kết quả
           </button>
@@ -339,7 +337,7 @@ function SummaryStat({
       : "bg-amber-50 text-amber-800 ring-amber-100";
 
   return (
-    <div className={`rounded-2xl px-4 py-4 ring-1 ${toneClassName}`}>
+    <div className={`rounded-lg px-4 py-4 ring-1 ${toneClassName}`}>
       <p className="text-xs font-semibold uppercase tracking-[0.18em]">{label}</p>
       <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
     </div>
@@ -353,6 +351,509 @@ function normalizeForMatch(input: string) {
     .toLowerCase()
     .trim();
 }
+
+// ─── Client-side fallback section extractor ───────────────────────────────────
+// When the API fails to parse certain sections (e.g. diem_manh, diem_yeu),
+// this function tries to extract them from the raw consultation text.
+
+const FALLBACK_HEADING_MAP: Record<string, string[]> = {
+  diem_manh: ["ĐIỂM MẠNH", "DIEM MANH", "ƯU ĐIỂM", "UU DIEM", "Điểm mạnh", "Ưu điểm"],
+  diem_yeu: ["ĐIỂM YẾU", "DIEM YEU", "HẠN CHẾ", "HAN CHE", "NHƯỢC ĐIỂM", "NHUOC DIEM", "Điểm yếu", "Hạn chế"],
+  moi_truong: ["MÔI TRƯỜNG", "MOI TRUONG", "MÔI TRƯỜNG LÀM VIỆC", "Môi trường"],
+};
+
+function normalizeHeading(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toUpperCase()
+    .trim();
+}
+
+function extractFallbackSections(rawText: string, keys: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  const lines = rawText.split(/\r?\n/);
+
+  // Build all heading variants to watch for
+  const allHeadings: { key: string; normalized: string }[] = [];
+  for (const key of keys) {
+    const variants = FALLBACK_HEADING_MAP[key] ?? [];
+    for (const v of variants) {
+      allHeadings.push({ key, normalized: normalizeHeading(v) });
+    }
+  }
+
+  // Also add all known section headings so we know when a section ends
+  const ALL_SECTION_HEADINGS = [
+    "TEN TINH CACH", "KHAI NIEM", "PHAN TICH CAC CHIEU TINH CACH",
+    "DIEM MANH", "UU DIEM", "DIEM YEU", "HAN CHE", "NHUOC DIEM",
+    "MOI TRUONG", "MOI TRUONG LAM VIEC",
+    "NGANH NGHE TUONG UNG", "DANH MUC NGANH VA NGHE NGHIEP TUONG UNG",
+  ];
+
+  let currentKey: string | null = null;
+  const buffers: Record<string, string[]> = {};
+
+  for (const line of lines) {
+    const norm = normalizeHeading(line);
+
+    // Check if this line is a heading for one of the keys we want
+    const matchedWanted = allHeadings.find((h) => norm === h.normalized || norm.startsWith(h.normalized));
+    if (matchedWanted) {
+      currentKey = matchedWanted.key;
+      buffers[currentKey] = buffers[currentKey] ?? [];
+      continue;
+    }
+
+    // Check if this line is any other known section heading → stop collecting
+    const isOtherHeading = ALL_SECTION_HEADINGS.some(
+      (h) => norm === h || norm.startsWith(h + " "),
+    );
+    if (isOtherHeading && currentKey) {
+      currentKey = null;
+      continue;
+    }
+
+    if (currentKey) {
+      buffers[currentKey] = buffers[currentKey] ?? [];
+      buffers[currentKey].push(line);
+    }
+  }
+
+  for (const key of keys) {
+    const content = (buffers[key] ?? []).join("\n").trim();
+    if (content) result[key] = content;
+  }
+
+  return result;
+}
+
+// ─── Octagon Diagram ──────────────────────────────────────────────────────────
+
+const DIMENSION_LABELS: {
+  key: "EI" | "SN" | "TF" | "JP";
+  left: { letter: string; label: string };
+  right: { letter: string; label: string };
+}[] = [
+  {
+    key: "EI",
+    left: { letter: "E", label: "Hướng ngoại" },
+    right: { letter: "I", label: "Hướng nội" },
+  },
+  {
+    key: "SN",
+    left: { letter: "S", label: "Thực tế" },
+    right: { letter: "N", label: "Trực giác" },
+  },
+  {
+    key: "TF",
+    left: { letter: "T", label: "Lý trí" },
+    right: { letter: "F", label: "Cảm xúc" },
+  },
+  {
+    key: "JP",
+    left: { letter: "J", label: "Nguyên tắc" },
+    right: { letter: "P", label: "Linh hoạt" },
+  },
+];
+
+/**
+ * scoreToPct: raw score → 0..1 percentage for each pole.
+ * Uses a "soft max" so typical scores look visually significant on the radar.
+ * SOFT_MAX = 60% of true max (15) → a score of 9 already fills 100% visually.
+ */
+const TRUE_MAX = 15;
+const SOFT_MAX = TRUE_MAX * 0.8; // score ≥ SOFT_MAX → 100% on chart
+
+function scoreToPct(score: number): {
+  pct: number;          // 0..1 boosted percentage (for radar radius)
+  rawPct: number;       // 0..1 true percentage (for legend display)
+  dominant: "left" | "right" | "neutral";
+} {
+  if (score === 0) return { pct: 0, rawPct: 0, dominant: "neutral" };
+  const sign = score > 0 ? 1 : -1;
+  const abs = Math.abs(score);
+  const rawPct = Math.min(abs / TRUE_MAX, 1);
+  const pct = Math.min(abs / SOFT_MAX, 1);
+  return {
+    pct,
+    rawPct,
+    dominant: sign > 0 ? "left" : "right",
+  };
+}
+
+// ─── Static fallback: điểm mạnh / điểm yếu cho cả 16 type ──────────────────────
+// Dùng khi API không trả về hoặc text extraction thất bại.
+const STATIC_DIEM_MANH: Record<string, string[]> = {
+  INTJ: ["Tư duy chiến lược và dài hạn", "Độc lập, tự chủ cao", "Quyết đoán và có mục tiêu rõ ràng", "Khả năng phân tích sâu và logic", "Luôn cải thiện bản thân"],
+  INTP: ["Tư duy phân tích xuất sắc", "Sáng tạo trong giải quyết vấn đề", "Khách quan và trung thực", "Ham học hỏi, tò mò trí tuệ", "Khả năng tư duy trừu tượng tốt"],
+  ENTJ: ["Lãnh đạo tự nhiên, quyết đoán", "Tư duy chiến lược và tầm nhìn xa", "Tổ chức và thực thi hiệu quả", "Tự tin và truyền cảm hứng", "Luôn hướng đến kết quả"],
+  ENTP: ["Sáng tạo và đổi mới liên tục", "Tranh luận giỏi, tư duy nhanh nhạy", "Thích ứng linh hoạt", "Nhìn thấy cơ hội ở mọi nơi", "Giao tiếp thuyết phục"],
+  INFJ: ["Đồng cảm sâu sắc với người khác", "Tầm nhìn xa và trực giác mạnh", "Kiên định với giá trị cá nhân", "Sáng tạo và có chiều sâu", "Tận tâm và đáng tin cậy"],
+  INFP: ["Đồng cảm và lắng nghe chân thành", "Sáng tạo và giàu trí tưởng tượng", "Trung thành với giá trị cốt lõi", "Nhiệt tình với ý nghĩa và mục đích", "Linh hoạt và cởi mở"],
+  ENFJ: ["Lãnh đạo bằng sự đồng cảm", "Truyền cảm hứng và kết nối tốt", "Tổ chức và lập kế hoạch hiệu quả", "Tận tâm, trách nhiệm cao", "Nhạy cảm với nhu cầu người khác"],
+  ENFP: ["Nhiệt huyết và truyền cảm hứng mạnh mẽ", "Sáng tạo và giàu ý tưởng", "Kết nối và giao tiếp xuất sắc", "Linh hoạt, thích nghi tốt", "Đồng cảm và quan tâm đến mọi người"],
+  ISTJ: ["Đáng tin cậy và có trách nhiệm cao", "Chi tiết, cẩn thận và chính xác", "Kiên trì và bền bỉ", "Tôn trọng cam kết và quy trình", "Ổn định và nhất quán"],
+  ISFJ: ["Chu đáo, ân cần và tận tâm", "Trung thành và đáng tin cậy", "Kiên nhẫn và lắng nghe tốt", "Thực tế, chú trọng chi tiết", "Hỗ trợ người khác hết lòng"],
+  ESTJ: ["Tổ chức và quản lý hiệu quả", "Quyết đoán và rõ ràng trong quyết định", "Trách nhiệm và đáng tin cậy", "Thực tế và hướng kết quả", "Lãnh đạo nhóm tốt"],
+  ESFJ: ["Hòa đồng và xây dựng mối quan hệ tốt", "Tận tâm, chu đáo với mọi người", "Hợp tác và hỗ trợ nhóm", "Thực tế và có trách nhiệm", "Trung thành và đáng tin"],
+  ISTP: ["Phân tích thực tế và giải quyết vấn đề nhanh", "Bình tĩnh dưới áp lực", "Kỹ năng kỹ thuật và tay nghề cao", "Linh hoạt và thích ứng tốt", "Quan sát sắc bén"],
+  ISFP: ["Sáng tạo và có thẩm mỹ tốt", "Đồng cảm và quan tâm chân thành", "Linh hoạt và không áp đặt", "Trung thành với giá trị cá nhân", "Thực tế và khéo tay"],
+  ESTP: ["Hành động nhanh và quyết đoán", "Thực tế, giải quyết vấn đề tức thì", "Giao tiếp tự tin và thuyết phục", "Linh hoạt và thích nghi cực tốt", "Năng động và đầy năng lượng"],
+  ESFP: ["Nhiệt tình và tạo không khí vui vẻ", "Giao tiếp tự nhiên và hòa đồng", "Thực tế và hành động ngay", "Quan tâm và hỗ trợ người xung quanh", "Linh hoạt, không cứng nhắc"],
+};
+
+const STATIC_DIEM_YEU: Record<string, string[]> = {
+  INTJ: ["Có thể quá cứng nhắc và khó thỏa hiệp", "Ít quan tâm đến cảm xúc người khác", "Đôi khi quá tự tin vào phán đoán của mình", "Khó giao tiếp cảm xúc tự nhiên", "Thiếu kiên nhẫn với những người chậm hiểu"],
+  INTP: ["Dễ trì hoãn và thiếu quyết đoán", "Bỏ qua cảm xúc của người khác", "Khó hoàn thành dự án vì luôn muốn hoàn thiện thêm", "Giao tiếp xã hội đôi khi lúng túng", "Thiếu tổ chức trong cuộc sống thực tế"],
+  ENTJ: ["Đôi khi quá kiểm soát và áp đặt", "Ít chú ý đến cảm xúc người khác", "Thiếu kiên nhẫn với tốc độ chậm", "Có thể bị coi là lạnh lùng hoặc độc đoán", "Khó chấp nhận ý kiến trái chiều"],
+  ENTP: ["Dễ bỏ dở dự án giữa chừng", "Tranh luận quá mức, gây căng thẳng", "Thiếu kiên nhẫn với quy trình lặp lại", "Đôi khi thiếu nhạy cảm với cảm xúc người khác", "Khó tập trung vào một mục tiêu dài hạn"],
+  INFJ: ["Dễ kiệt sức khi giúp đỡ quá nhiều", "Quá hoàn hảo chủ nghĩa", "Khó mở lòng và dễ bị tổn thương", "Đôi khi quá lý tưởng hóa", "Tránh né xung đột dù cần thiết"],
+  INFP: ["Dễ bị tổn thương khi bị chỉ trích", "Đôi khi quá lý tưởng, xa rời thực tế", "Khó quyết định dứt khoát", "Tránh xung đột và đối đầu", "Dễ trì hoãn công việc"],
+  ENFJ: ["Dễ bỏ qua nhu cầu bản thân vì người khác", "Quá nhạy cảm với lời chỉ trích", "Đôi khi kiểm soát quá mức", "Khó từ chối người khác", "Dễ căng thẳng khi có xung đột"],
+  ENFP: ["Khó tập trung lâu dài vào một việc", "Dễ bị phân tâm bởi ý tưởng mới", "Thiếu kỷ luật trong việc hoàn thành nhiệm vụ", "Đôi khi quá cảm tính trong quyết định", "Khó tuân theo quy trình cứng nhắc"],
+  ISTJ: ["Cứng nhắc, khó thay đổi theo hoàn cảnh mới", "Đôi khi quá bảo thủ", "Ít linh hoạt với ý tưởng sáng tạo", "Khó bày tỏ cảm xúc", "Có thể quá khắt khe với bản thân và người khác"],
+  ISFJ: ["Dễ bị lợi dụng vì quá tốt bụng", "Khó nói không và đặt ranh giới", "Tránh né xung đột và thay đổi", "Đôi khi quá tự ti, không nhận ra giá trị bản thân", "Khó thích nghi với thay đổi đột ngột"],
+  ESTJ: ["Đôi khi quá cứng nhắc với quy tắc", "Ít linh hoạt với cách làm mới", "Khó lắng nghe cảm xúc người khác", "Có thể bị coi là áp đặt", "Thiếu kiên nhẫn với sự mơ hồ"],
+  ESFJ: ["Dễ bị ảnh hưởng bởi ý kiến người khác", "Tránh xung đột đến mức cần thiết", "Quá cần sự chấp thuận từ bên ngoài", "Đôi khi thiếu quyết đoán", "Khó thích nghi với thay đổi lớn"],
+  ISTP: ["Khó giao tiếp cảm xúc với người khác", "Đôi khi quá lạnh lùng và xa cách", "Thiếu kiên nhẫn với lý thuyết dài dòng", "Khó cam kết lâu dài", "Dễ bỏ qua cảm xúc người xung quanh"],
+  ISFP: ["Dễ bị tổn thương và quá nhạy cảm", "Tránh xung đột dù cần thiết", "Khó lập kế hoạch dài hạn", "Đôi khi thiếu quyết đoán", "Khó bày tỏ nhu cầu bản thân"],
+  ESTP: ["Dễ chán với công việc lặp lại", "Đôi khi thiếu suy nghĩ dài hạn", "Có thể bị coi là liều lĩnh", "Khó kiên nhẫn với chi tiết và lý thuyết", "Đôi khi thiếu nhạy cảm với cảm xúc người khác"],
+  ESFP: ["Dễ tránh né vấn đề nghiêm túc", "Khó tập trung dài hạn", "Đôi khi quá bốc đồng", "Thiếu kỷ luật với kế hoạch", "Dễ bị ảnh hưởng bởi môi trường xung quanh"],
+};
+
+// ── Radar (octagon) ─────────────────────────────────────────────────────────
+
+/**
+ * 8-axis radar chart.
+ * Each pair of opposite axes = one MBTI dimension.
+ * The filled polygon is built from the dominant tip of each axis
+ * (or centre if neutral).
+ *
+ * Axes layout (vertex index, clockwise from top):
+ *   0=top      → E
+ *   1=top-right → N (opposite of S at 5=bot-left)
+ *   2=right    → F (opposite of T at 6=left)
+ *   3=bot-right → P (opposite of J at 7=top-left)
+ *   4=bottom   → I
+ *   5=bot-left → S
+ *   6=left     → T
+ *   7=top-left → J
+ */
+const RADAR_AXES: {
+  vertexIdx: number;
+  letter: string;
+  label: string;
+  scoreKey: "EI" | "SN" | "TF" | "JP";
+  positiveDir: boolean; // true = positive raw score → this vertex
+}[] = [
+  { vertexIdx: 0, letter: "E", label: "Hướng ngoại", scoreKey: "EI", positiveDir: true  },
+  { vertexIdx: 1, letter: "N", label: "Trực giác",   scoreKey: "SN", positiveDir: false },
+  { vertexIdx: 2, letter: "F", label: "Cảm xúc",     scoreKey: "TF", positiveDir: false },
+  { vertexIdx: 3, letter: "P", label: "Linh hoạt",   scoreKey: "JP", positiveDir: false },
+  { vertexIdx: 4, letter: "I", label: "Hướng nội",   scoreKey: "EI", positiveDir: false },
+  { vertexIdx: 5, letter: "S", label: "Thực tế",     scoreKey: "SN", positiveDir: true  },
+  { vertexIdx: 6, letter: "T", label: "Lý trí",      scoreKey: "TF", positiveDir: true  },
+  { vertexIdx: 7, letter: "J", label: "Nguyên tắc",  scoreKey: "JP", positiveDir: true  },
+];
+
+const LEGEND_ROWS: {
+  scoreKey: "EI" | "SN" | "TF" | "JP";
+  left: { letter: string; label: string };
+  right: { letter: string; label: string };
+}[] = [
+  { scoreKey: "EI", left: { letter: "E", label: "Hướng ngoại" }, right: { letter: "I", label: "Hướng nội" } },
+  { scoreKey: "SN", left: { letter: "S", label: "Thực tế" },     right: { letter: "N", label: "Trực giác" } },
+  { scoreKey: "TF", left: { letter: "T", label: "Lý trí" },      right: { letter: "F", label: "Cảm xúc" } },
+  { scoreKey: "JP", left: { letter: "J", label: "Nguyên tắc" },  right: { letter: "P", label: "Linh hoạt" } },
+];
+
+function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
+  const [animPct, setAnimPct] = useState(0);
+
+  // Stable key: serialize scores once so the effect only fires when values actually change
+  const scoresKey = Object.entries(scores).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join(",");
+
+  useEffect(() => {
+    // Reset then animate 0 → 1 — runs exactly once per unique score set
+    setAnimPct(0);
+    const startTime = performance.now();
+    const duration = 900;
+    let id: number;
+    const tick = (now: number) => {
+      const t = Math.min((now - startTime) / duration, 1);
+      setAnimPct(1 - Math.pow(1 - t, 3)); // ease-out cubic
+      if (t < 1) { id = requestAnimationFrame(tick); }
+    };
+    id = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scoresKey]);
+
+  const SIZE   = 300;
+  const cx     = SIZE / 2;
+  const cy     = SIZE / 2;
+  const R      = SIZE / 2 - 50; // radius of outer ring (leaves room for labels)
+
+  function deg2rad(d: number) { return (d * Math.PI) / 180; }
+  function axisPoint(angleDeg: number, r: number) {
+    return {
+      x: cx + r * Math.cos(deg2rad(angleDeg)),
+      y: cy + r * Math.sin(deg2rad(angleDeg)),
+    };
+  }
+
+  // Compute 8 data points — one per axis end.
+  // For each dimension we have a pos-end and a neg-end.
+  // The point on the dominant side gets the full radius; the opposite end always stays at centre.
+  // This ensures the polygon always has 8 vertices and is fully closed.
+  const axisOrder = [
+    { key: "EI" as const, angleDeg: 270, isPos: true  },  // E  (top)
+    { key: "SN" as const, angleDeg: 315, isPos: false },  // N  (top-right)
+    { key: "TF" as const, angleDeg: 0,   isPos: false },  // F  (right)
+    { key: "JP" as const, angleDeg: 45,  isPos: false },  // P  (bot-right)
+    { key: "EI" as const, angleDeg: 90,  isPos: false },  // I  (bottom)
+    { key: "SN" as const, angleDeg: 135, isPos: true  },  // S  (bot-left)
+    { key: "TF" as const, angleDeg: 180, isPos: true  },  // T  (left)
+    { key: "JP" as const, angleDeg: 225, isPos: true  },  // J  (top-left)
+  ];
+
+  // dataPoints: active poles get their radius; inactive are flagged but excluded from drawing.
+  const dataPoints = axisOrder.map(({ key, angleDeg, isPos }) => {
+    const raw = scores[key] ?? 0;
+    const { pct, dominant } = scoreToPct(raw);
+    const effectivePct = pct * animPct;
+    const isActive = (isPos && dominant === "left") || (!isPos && dominant === "right");
+    const r = isActive ? effectivePct * R : 0;
+    return { ...axisPoint(angleDeg, r), isActive };
+  });
+
+  // Build the radar polygon path.
+  //
+  // Rule: the 8 axes are evenly spaced around a circle. Each MBTI dimension
+  // occupies 2 opposite positions (e.g. E at index 0, I at index 4).
+  // Because of this, when active points surround the centre they always span
+  // indices that "wrap around" more than half the circle.
+  //
+  // Simple reliable test:
+  //   • Find all "gaps" (runs of inactive indices between active ones, going CW).
+  //   • If the LONGEST single gap ≥ 4 consecutive inactive slots, the active
+  //     points are all bunched on one side → centre is outside → route through it.
+  //   • Otherwise the active points spread around enough to enclose the centre.
+  //
+  // This avoids ray-casting edge cases (points on axes, collinear vertices, etc.)
+  const quadPoly = (() => {
+    const n = dataPoints.length; // always 8
+    const isActive = dataPoints.map((p) => p.isActive);
+
+    const activeCount = isActive.filter(Boolean).length;
+    if (activeCount === 0) return "";
+
+    // Find the length of the longest contiguous run of INACTIVE indices (circular)
+    let maxGap = 0;
+    let curGap = 0;
+    // Check twice around to handle wrap-around gaps
+    for (let step = 0; step < n * 2; step++) {
+      if (!isActive[step % n]) {
+        curGap++;
+        if (curGap > maxGap) maxGap = curGap;
+      } else {
+        curGap = 0;
+      }
+    }
+    // Cap at n to avoid double-counting full-inactive case
+    maxGap = Math.min(maxGap, n);
+
+    // If longest gap ≥ 4 (half the circle), centre is outside the active arc
+    const centreOutside = maxGap >= 4;
+
+    if (!centreOutside) {
+      // Active points surround the centre → simple closed polygon, no centre vertex
+      return dataPoints
+        .filter((p) => p.isActive)
+        .map((p) => `${p.x},${p.y}`)
+        .join(" ");
+    }
+
+    // Centre is outside → split active points into contiguous runs,
+    // bridging each gap by routing through the centre point.
+    const firstActive = isActive.findIndex(Boolean);
+    if (firstActive === -1) return "";
+
+    const segments: string[][] = [];
+    let run: string[] = [];
+
+    for (let step = 0; step < n; step++) {
+      const idx = (firstActive + step) % n;
+      if (isActive[idx]) {
+        run.push(`${dataPoints[idx].x},${dataPoints[idx].y}`);
+      } else {
+        if (run.length > 0) { segments.push(run); run = []; }
+      }
+    }
+    if (run.length > 0) segments.push(run);
+
+    if (segments.length === 0) return "";
+    if (segments.length === 1) {
+      // One contiguous arc on one side — close via centre
+      return `${segments[0].join(" ")} ${cx},${cy}`;
+    }
+    // Multiple arcs — place ONE centre vertex between adjacent arcs only.
+    // No trailing centre: SVG polygon auto-closes last→first, which is correct.
+    return segments.map((s) => s.join(" ")).join(` ${cx},${cy} `);
+  })();
+
+  // Grid rings (full 8-point octagon for visual reference)
+  const OCT_N = 8;
+  const octPts = (scale: number) =>
+    Array.from({ length: OCT_N }, (_, i) => {
+      const a = (Math.PI / 4) * i - Math.PI / 2;
+      return `${cx + scale * R * Math.cos(a)},${cy + scale * R * Math.sin(a)}`;
+    }).join(" ");
+
+  // Label positions (outside outer ring)
+  const LABEL_SCALE = 1.28;
+
+  return (
+    <div className="flex flex-col items-center gap-5">
+      {/* ── Radar SVG ── */}
+      <svg
+        width={SIZE} height={SIZE}
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        style={{ overflow: "visible" }}
+        aria-label="Biểu đồ radar MBTI"
+      >
+        {/* Grid rings: 33%, 66%, 100% */}
+        {[0.33, 0.66, 1.0].map((s) => (
+          <polygon key={s} points={octPts(s)}
+            fill="none"
+            stroke={s === 1.0 ? "#cbd5e1" : "#e2e8f0"}
+            strokeWidth={s === 1.0 ? 1.5 : 0.8}
+            strokeDasharray={s < 1.0 ? "4 3" : undefined}
+          />
+        ))}
+
+        {/* 8 axis spokes */}
+        {Array.from({ length: OCT_N }, (_, i) => {
+          const a = (Math.PI / 4) * i - Math.PI / 2;
+          return (
+            <line key={i}
+              x1={cx} y1={cy}
+              x2={cx + R * Math.cos(a)} y2={cy + R * Math.sin(a)}
+              stroke="#e2e8f0" strokeWidth="1"
+            />
+          );
+        })}
+
+        {/* Outer ring vertex dots */}
+        {Array.from({ length: OCT_N }, (_, i) => {
+          const a = (Math.PI / 4) * i - Math.PI / 2;
+          return (
+            <circle key={i}
+              cx={cx + R * Math.cos(a)} cy={cy + R * Math.sin(a)}
+              r="3" fill="white" stroke="#cbd5e1" strokeWidth="1.5"
+            />
+          );
+        })}
+
+        {/* Radar polygon — active tips only, routed through centre when needed */}
+        {quadPoly && (
+          <polygon
+            points={quadPoly}
+            fill="rgba(99,102,241,0.15)"
+            stroke="#6366f1"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        )}
+
+        {/* Data point dots — only on active (non-centre) tips */}
+        {dataPoints.filter((p) => p.isActive).map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="4"
+            fill="#6366f1" stroke="white" strokeWidth="1.5"
+          />
+        ))}
+
+        {/* Axis labels (both ends of all 4 axes) */}
+        {axisOrder.map(({ key, angleDeg, isPos }) => {
+          const raw = scores[key] ?? 0;
+          const { dominant } = scoreToPct(raw);
+          // Find matching axis info from RADAR_AXES
+          const axisInfo = RADAR_AXES.find((a) => a.scoreKey === key && a.positiveDir === isPos);
+          if (!axisInfo) return null;
+          const { letter, label } = axisInfo;
+          const active = isPos ? dominant === "left" : dominant === "right";
+          const lp = axisPoint(angleDeg, R * LABEL_SCALE);
+          const anchor = lp.x < cx - 8 ? "end" : lp.x > cx + 8 ? "start" : "middle";
+          return (
+            <g key={`${key}-${letter}`}>
+              <text x={lp.x} y={lp.y - 5} textAnchor={anchor}
+                fontSize="11" fontWeight={active ? "700" : "400"}
+                fill={active ? "#6366f1" : "#94a3b8"}>
+                {letter}
+              </text>
+              <text x={lp.x} y={lp.y + 8} textAnchor={anchor}
+                fontSize="9" fill={active ? "#475569" : "#94a3b8"}>
+                {label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* ── Legend bars (true %, not boosted) ── */}
+      <div className="w-full space-y-3">
+        {LEGEND_ROWS.map(({ scoreKey, left, right }) => {
+          const raw = scores[scoreKey] ?? 0;
+          const { rawPct, dominant } = scoreToPct(raw);
+          const isLeft  = dominant === "left";
+          const isRight = dominant === "right";
+          const activeLetter = isLeft ? left.letter : isRight ? right.letter : "–";
+          const displayPct   = Math.round(rawPct * 100);
+          const barW         = rawPct * animPct * 100;
+
+          return (
+            <div key={scoreKey}>
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className={`flex items-center gap-1.5 font-medium ${isLeft ? "text-indigo-700" : "text-slate-400"}`}>
+                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold
+                    ${isLeft ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-400"}`}>
+                    {left.letter}
+                  </span>
+                  {left.label}
+                </span>
+                <span className="px-2 text-[11px] text-slate-500">
+                  {dominant !== "neutral" ? `${activeLetter} · ${displayPct}%` : "50/50"}
+                </span>
+                <span className={`flex items-center gap-1.5 font-medium ${isRight ? "text-sky-600" : "text-slate-400"}`}>
+                  {right.label}
+                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold
+                    ${isRight ? "bg-sky-100 text-sky-600" : "bg-slate-100 text-slate-400"}`}>
+                    {right.letter}
+                  </span>
+                </span>
+              </div>
+              <div className="relative h-2 overflow-hidden rounded-full bg-slate-100">
+                {isLeft && (
+                  <div className="absolute left-0 top-0 h-full rounded-full bg-indigo-400"
+                    style={{ width: `${barW}%` }} />
+                )}
+                {isRight && (
+                  <div className="absolute right-0 top-0 h-full rounded-full bg-sky-400"
+                    style={{ width: `${barW}%` }} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// ─── Section helpers ───────────────────────────────────────────────────────────
 
 function sectionHasContent(value: unknown) {
   if (Array.isArray(value)) {
@@ -646,15 +1147,31 @@ function renderSectionContent(key: string, value: SectionValue) {
   );
 }
 
+function getResultSectionTone(key: string) {
+  if (key === "diem_manh" || key === "nganh_nghe_tuong_ung" || key === "moi_truong") {
+    return {
+      card: "border-amber-200 bg-amber-50/60",
+      title: "text-amber-900",
+    };
+  }
+  return {
+    card: "border-indigo-100 bg-indigo-50/50",
+    title: "text-indigo-900",
+  };
+}
+
 function Result({
   info: { type, nameVi, traits },
   mbtiType,
+  answers,
   onRetry,
 }: {
   info: import("./mbti-data").MBTITypeInfo;
   mbtiType: string;
+  answers: AnswerRecord;
   onRetry: () => void;
 }) {
+  const dimensionScores = computeMBTIScores(answers);
   const [consultationLoading, setConsultationLoading] = useState(true);
   const [consultationText, setConsultationText] = useState<string | null>(null);
   const [consultationSections, setConsultationSections] = useState<Record<string, SectionValue> | null>(null);
@@ -673,14 +1190,41 @@ function Result({
         return res.json();
       })
       .then((data) => {
+        const rawText: string = data.consultation ?? "";
         const sections = data.sections && typeof data.sections === "object" ? data.sections : null;
-        const normalizedEntries = sections
+
+        // Build normalized entries, keeping all SECTION_DEFS keys even if API missed them
+        let normalizedEntries = sections
           ? Object.entries(sections).filter(([, value]) => sectionHasContent(value))
           : [];
+
+        // Client-side fallback: if some expected keys are missing, try to extract from raw text
+        if (rawText) {
+          const expectedKeys = ["diem_manh", "diem_yeu", "moi_truong"];
+          const presentKeys = new Set(normalizedEntries.map(([k]) => k));
+          const missingKeys = expectedKeys.filter((k) => !presentKeys.has(k));
+          if (missingKeys.length > 0) {
+            const fallback = extractFallbackSections(rawText, missingKeys);
+            for (const [k, v] of Object.entries(fallback)) {
+              if (sectionHasContent(v)) normalizedEntries.push([k, v]);
+            }
+          }
+        }
+
+        // Last-resort static fallback: guarantee diem_manh & diem_yeu always present
+        const presentAfterFallback = new Set(normalizedEntries.map(([k]) => k));
+        const type = mbtiType as keyof typeof STATIC_DIEM_MANH;
+        if (!presentAfterFallback.has("diem_manh") && STATIC_DIEM_MANH[type]) {
+          normalizedEntries.push(["diem_manh", STATIC_DIEM_MANH[type]]);
+        }
+        if (!presentAfterFallback.has("diem_yeu") && STATIC_DIEM_YEU[type]) {
+          normalizedEntries.push(["diem_yeu", STATIC_DIEM_YEU[type]]);
+        }
+
         if (normalizedEntries.length) {
           setConsultationSections(Object.fromEntries(normalizedEntries) as Record<string, SectionValue>);
         }
-        setConsultationText(data.consultation ?? "");
+        setConsultationText(rawText);
       })
       .catch((err) => {
         setConsultationError(err.message || "Không tải được lời tư vấn.");
@@ -692,10 +1236,17 @@ function Result({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="rounded-xl bg-indigo-100 px-4 py-2 text-2xl font-bold text-indigo-800">{type}</span>
+          <span className="rounded-lg bg-indigo-100 px-4 py-2 text-2xl font-bold text-indigo-800">{type}</span>
           <h2 className="text-xl font-semibold text-slate-800">{nameVi}</h2>
+        </div>
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-amber-700">Điểm nhấn kết quả</p>
+          <p className="mt-1 text-sm text-amber-900">
+            Nhóm <strong>{type}</strong> nổi bật ở đặc trưng <strong>{traits[0]}</strong>. Ưu tiên đọc kỹ mục{" "}
+            <strong>Điểm mạnh</strong> và <strong>Ngành, nghề tương ứng</strong> để chọn hướng phù hợp.
+          </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {traits.map((trait) => (
@@ -706,8 +1257,17 @@ function Result({
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/60">
-        <h3 className="font-semibold text-slate-800">Tư vấn AI</h3>
+      {/* Octagon Diagram */}
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="mb-1 font-semibold text-slate-800">Biểu đồ 4 chiều tính cách</h3>
+        <p className="mb-4 text-xs text-slate-500">
+          Thanh bar thể hiện mức độ nghiêng về phía nào trên mỗi trục. Càng dài = càng rõ rệt.
+        </p>
+        <OctagonDiagram scores={dimensionScores} />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="font-semibold text-slate-800">Tư vấn AI theo hồ sơ MBTI</h3>
         {consultationLoading && (
           <div className="mt-3 flex items-center gap-2 text-indigo-600">
             <svg
@@ -742,12 +1302,15 @@ function Result({
               { key: "nganh_nghe_tuong_ung", label: "NGÀNH, NGHỀ TƯƠNG ỨNG" },
             ]
               .filter((item) => consultationSections[item.key])
-              .map((item) => (
-                <section key={item.key} className="space-y-2">
-                  <h4 className="text-sm font-semibold text-slate-700">{item.label}</h4>
+              .map((item) => {
+                const tone = getResultSectionTone(item.key);
+                return (
+                <section key={item.key} className={`space-y-2 rounded-lg border px-4 py-3 ${tone.card}`}>
+                  <h4 className={`text-sm font-semibold ${tone.title}`}>{item.label}</h4>
                   {renderSectionContent(item.key, consultationSections[item.key] as SectionValue)}
                 </section>
-              ))}
+                );
+              })}
           </div>
         )}
         {!consultationLoading && !consultationSections && consultationText && (
@@ -758,7 +1321,7 @@ function Result({
       <button
         type="button"
         onClick={onRetry}
-        className="w-full rounded-xl border-2 border-slate-300 bg-white px-4 py-3 font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
       >
         Làm lại bài trắc nghiệm
       </button>
