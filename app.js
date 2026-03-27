@@ -1,5 +1,4 @@
-﻿
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import * as Minio from "minio";
@@ -42,7 +41,7 @@ const openaiClient = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
-/** Read stream to Buffer (for .docx) */
+
 function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -168,6 +167,7 @@ const LABEL_TO_KEY = (() => {
 function normalizeHeading(input) {
   if (!input) return "";
 
+
   let s = input.trim();
   s = s
     .replace(/^(\d+\.)+\s+/, "")          // "1. " / "1.2. "
@@ -177,7 +177,7 @@ function normalizeHeading(input) {
     .replace(/^\d+[)\]]\s+/, "")           // "1) "
     .replace(/^[-\u2013\u2022]\s+/, "");   // "- " "• "
 
-
+  // Replace đ/Đ explicitly — NFD does not decompose these
   s = s.replace(/[\u0111]/g, "d").replace(/[\u0110]/g, "D");
 
   return s
@@ -266,7 +266,10 @@ function extractSectionsByHeadings(text) {
   return sections;
 }
 
-
+/**
+ * Strip leading bullets/numbering from a single line.
+ * Removes patterns like: 1. / 1) / (1) / - / • / 6.1.2.3
+ */
 function stripLeadingNumber(line) {
   return line
     .replace(/^\s*(\d+\.)+\d*\s+/g, "")
@@ -276,6 +279,10 @@ function stripLeadingNumber(line) {
     .replace(/^\s*[-–•]\s+/g, "");
 }
 
+/**
+ * Clean generic section text: remove leading numbers/bullets from every line,
+ * collapse multiple blank lines, trim.
+ */
 function cleanSectionText(text) {
   if (!text) return text;
   return text
@@ -286,13 +293,17 @@ function cleanSectionText(text) {
     .trim();
 }
 
-
+/**
+ * Parse the raw nganh_nghe_tuong_ung block into "Tên ngành: Nghề1, Nghề2" format.
+ * Group headers (Lĩnh vực / Nhóm ngành) are preserved as section titles.
+ */
 function cleanNganhNghe(text) {
   if (!text) return text;
 
   const ngheHeaderRe = /Ngh[eề]\s+nghi[eệ]p\s+t[uư][oơ]ng\s+[uứ]ng\s*[:\-]?\s*/i;
   const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
 
+  // Use raw Vietnamese text check instead of normalizeHeading (which strips "L" as Roman numeral)
   const isGroupHeader = (line) => {
     const lower = line
       .normalize("NFD")
@@ -307,7 +318,7 @@ function cleanNganhNghe(text) {
     );
   };
 
-
+  // Giữ nguyên mã ngành — ví dụ: "Quản trị kinh doanh (7340101)"
   const keepCode = (line) => line.trim();
 
   const rawLines = text
@@ -513,6 +524,7 @@ async function extractSectionsWithAI(text, mbtiType) {
   }
 }
 
+
 app.get("/api/ai-consultation", async (req, res) => {
   try {
     const mbtiType = (req.query.mbtiType || "").toUpperCase();
@@ -570,7 +582,6 @@ app.get("/api/ai-consultation", async (req, res) => {
   }
 });
 
-// Health check
 app.get("/health", (_req, res) => res.json({ status: "ok", service: "MBTI-NEU API" }));
 
 export default app;

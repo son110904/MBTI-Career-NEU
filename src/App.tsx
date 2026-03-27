@@ -10,13 +10,13 @@ const totalQuestions = MBTI_QUESTIONS.length;
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "https://mbti-career-neu.vercel.app").replace(/\/$/, "");
 const BULLET_SECTION_KEYS = new Set(["diem_manh", "diem_yeu", "moi_truong"]);
 const QUIZ_SCALE_OPTIONS = [
-  { value: 7, size: 38, color: "#059669", glow: "rgba(5, 150, 105, 0.24)", label: "Hoàn toàn đồng ý" },
-  { value: 6, size: 32, color: "#10b981", glow: "rgba(16, 185, 129, 0.22)", label: "Rất đồng ý" },
-  { value: 5, size: 26, color: "#6ee7b7", glow: "rgba(110, 231, 183, 0.2)", label: "Đồng ý" },
-  { value: 4, size: 20, color: "#94a3b8", glow: "rgba(148, 163, 184, 0.2)", label: "Trung lập" },
-  { value: 3, size: 26, color: "#c4b5fd", glow: "rgba(196, 181, 253, 0.22)", label: "Không đồng ý" },
-  { value: 2, size: 32, color: "#a78bfa", glow: "rgba(167, 139, 250, 0.24)", label: "Rất không đồng ý" },
   { value: 1, size: 38, color: "#8b5cf6", glow: "rgba(139, 92, 246, 0.24)", label: "Hoàn toàn không đồng ý" },
+  { value: 2, size: 32, color: "#a78bfa", glow: "rgba(167, 139, 250, 0.24)", label: "Rất không đồng ý" },
+  { value: 3, size: 26, color: "#c4b5fd", glow: "rgba(196, 181, 253, 0.22)", label: "Không đồng ý" },
+  { value: 4, size: 20, color: "#94a3b8", glow: "rgba(148, 163, 184, 0.2)", label: "Trung lập" },
+  { value: 5, size: 26, color: "#6ee7b7", glow: "rgba(110, 231, 183, 0.2)", label: "Đồng ý" },
+  { value: 6, size: 32, color: "#10b981", glow: "rgba(16, 185, 129, 0.22)", label: "Rất đồng ý" },
+  { value: 7, size: 38, color: "#059669", glow: "rgba(5, 150, 105, 0.24)", label: "Hoàn toàn đồng ý" },
 ] as const;
 
 export default function App() {
@@ -261,8 +261,8 @@ function Quiz({
 
               <div className="mt-5 rounded-lg bg-slate-50 px-4 py-4 ring-1 ring-slate-200 sm:px-5" style={{ overflow: "visible" }}>
                 <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.16em] sm:text-xs">
-                  <span className="text-emerald-700">Đồng ý</span>
                   <span className="text-violet-700">Không đồng ý</span>
+                  <span className="text-emerald-700">Đồng ý</span>
                 </div>
                 <div
                   role="radiogroup"
@@ -431,33 +431,6 @@ function extractFallbackSections(rawText: string, keys: string[]): Record<string
 
 // ─── Octagon Diagram ──────────────────────────────────────────────────────────
 
-const DIMENSION_LABELS: {
-  key: "EI" | "SN" | "TF" | "JP";
-  left: { letter: string; label: string };
-  right: { letter: string; label: string };
-}[] = [
-  {
-    key: "EI",
-    left: { letter: "E", label: "Hướng ngoại" },
-    right: { letter: "I", label: "Hướng nội" },
-  },
-  {
-    key: "SN",
-    left: { letter: "S", label: "Thực tế" },
-    right: { letter: "N", label: "Trực giác" },
-  },
-  {
-    key: "TF",
-    left: { letter: "T", label: "Lý trí" },
-    right: { letter: "F", label: "Cảm xúc" },
-  },
-  {
-    key: "JP",
-    left: { letter: "J", label: "Nguyên tắc" },
-    right: { letter: "P", label: "Linh hoạt" },
-  },
-];
-
 /**
  * scoreToPct: raw score → 0..1 percentage for each pole.
  * Uses a "soft max" so typical scores look visually significant on the radar.
@@ -558,16 +531,6 @@ const RADAR_AXES: {
   { vertexIdx: 7, letter: "J", label: "Nguyên tắc",  scoreKey: "JP", positiveDir: true  },
 ];
 
-const LEGEND_ROWS: {
-  scoreKey: "EI" | "SN" | "TF" | "JP";
-  left: { letter: string; label: string };
-  right: { letter: string; label: string };
-}[] = [
-  { scoreKey: "EI", left: { letter: "E", label: "Hướng ngoại" }, right: { letter: "I", label: "Hướng nội" } },
-  { scoreKey: "SN", left: { letter: "S", label: "Thực tế" },     right: { letter: "N", label: "Trực giác" } },
-  { scoreKey: "TF", left: { letter: "T", label: "Lý trí" },      right: { letter: "F", label: "Cảm xúc" } },
-  { scoreKey: "JP", left: { letter: "J", label: "Nguyên tắc" },  right: { letter: "P", label: "Linh hoạt" } },
-];
 
 function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
   const [animPct, setAnimPct] = useState(0);
@@ -596,6 +559,14 @@ function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
   const cy     = SIZE / 2;
   const R      = SIZE / 2 - 50; // radius of outer ring (leaves room for labels)
 
+  // dataScale: zoom the polygon when scores are weak, so the shape fills the grid.
+  // Grid rings, spokes, labels are always drawn at R — only polygon points are scaled.
+  const maxRawPct = Math.max(
+    ...Object.values(scores).map((s) => Math.min(Math.abs(s ?? 0) / (15 * 0.8), 1)),
+    0.01,
+  );
+  const dataScale = Math.min(1 / maxRawPct, 2.5);
+
   function deg2rad(d: number) { return (d * Math.PI) / 180; }
   function axisPoint(angleDeg: number, r: number) {
     return {
@@ -623,9 +594,9 @@ function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
   const dataPoints = axisOrder.map(({ key, angleDeg, isPos }) => {
     const raw = scores[key] ?? 0;
     const { pct, dominant } = scoreToPct(raw);
-    const effectivePct = pct * animPct;
+    const effectivePct = pct * animPct * dataScale;
     const isActive = (isPos && dominant === "left") || (!isPos && dominant === "right");
-    const r = isActive ? effectivePct * R : 0;
+    const r = isActive ? Math.min(effectivePct * R, R) : 0;
     return { ...axisPoint(angleDeg, r), isActive };
   });
 
@@ -724,15 +695,31 @@ function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
         style={{ overflow: "visible" }}
         aria-label="Biểu đồ radar MBTI"
       >
-        {/* Grid rings: 33%, 66%, 100% */}
-        {[0.33, 0.66, 1.0].map((s) => (
+        {/* Grid rings: 33%, 66% dashed + 100% solid outer frame */}
+        {[0.33, 0.66].map((s) => (
           <polygon key={s} points={octPts(s)}
             fill="none"
-            stroke={s === 1.0 ? "#cbd5e1" : "#e2e8f0"}
-            strokeWidth={s === 1.0 ? 1.5 : 0.8}
-            strokeDasharray={s < 1.0 ? "4 3" : undefined}
+            stroke="#e2e8f0"
+            strokeWidth={0.8}
+            strokeDasharray="4 3"
           />
         ))}
+        <polygon points={octPts(1.0)}
+          fill="none"
+          stroke="#cbd5e1"
+          strokeWidth={1.5}
+        />
+
+        {/* Outer ring vertex dots */}
+        {Array.from({ length: OCT_N }, (_, i) => {
+          const a = (Math.PI / 4) * i - Math.PI / 2;
+          return (
+            <circle key={i}
+              cx={cx + R * Math.cos(a)} cy={cy + R * Math.sin(a)}
+              r="3" fill="white" stroke="#cbd5e1" strokeWidth="1.5"
+            />
+          );
+        })}
 
         {/* 8 axis spokes */}
         {Array.from({ length: OCT_N }, (_, i) => {
@@ -746,16 +733,7 @@ function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
           );
         })}
 
-        {/* Outer ring vertex dots */}
-        {Array.from({ length: OCT_N }, (_, i) => {
-          const a = (Math.PI / 4) * i - Math.PI / 2;
-          return (
-            <circle key={i}
-              cx={cx + R * Math.cos(a)} cy={cy + R * Math.sin(a)}
-              r="3" fill="white" stroke="#cbd5e1" strokeWidth="1.5"
-            />
-          );
-        })}
+
 
         {/* Radar polygon — active tips only, routed through centre when needed */}
         {quadPoly && (
@@ -802,52 +780,6 @@ function OctagonDiagram({ scores }: { scores: Record<string, number> }) {
         })}
       </svg>
 
-      {/* ── Legend bars (true %, not boosted) ── */}
-      <div className="w-full space-y-3">
-        {LEGEND_ROWS.map(({ scoreKey, left, right }) => {
-          const raw = scores[scoreKey] ?? 0;
-          const { rawPct, dominant } = scoreToPct(raw);
-          const isLeft  = dominant === "left";
-          const isRight = dominant === "right";
-          const activeLetter = isLeft ? left.letter : isRight ? right.letter : "–";
-          const displayPct   = Math.round(rawPct * 100);
-          const barW         = rawPct * animPct * 100;
-
-          return (
-            <div key={scoreKey}>
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className={`flex items-center gap-1.5 font-medium ${isLeft ? "text-indigo-700" : "text-slate-400"}`}>
-                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold
-                    ${isLeft ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-400"}`}>
-                    {left.letter}
-                  </span>
-                  {left.label}
-                </span>
-                <span className="px-2 text-[11px] text-slate-500">
-                  {dominant !== "neutral" ? `${activeLetter} · ${displayPct}%` : "50/50"}
-                </span>
-                <span className={`flex items-center gap-1.5 font-medium ${isRight ? "text-sky-600" : "text-slate-400"}`}>
-                  {right.label}
-                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold
-                    ${isRight ? "bg-sky-100 text-sky-600" : "bg-slate-100 text-slate-400"}`}>
-                    {right.letter}
-                  </span>
-                </span>
-              </div>
-              <div className="relative h-2 overflow-hidden rounded-full bg-slate-100">
-                {isLeft && (
-                  <div className="absolute left-0 top-0 h-full rounded-full bg-indigo-400"
-                    style={{ width: `${barW}%` }} />
-                )}
-                {isRight && (
-                  <div className="absolute right-0 top-0 h-full rounded-full bg-sky-400"
-                    style={{ width: `${barW}%` }} />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

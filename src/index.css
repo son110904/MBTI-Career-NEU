@@ -25,7 +25,7 @@
   height: 2px;
   transform: translateY(-50%);
   border-radius: 9999px;
-  background: linear-gradient(90deg, #10b981 0%, #6ee7b7 28%, #9ca3af 50%, #c4b5fd 72%, #8b5cf6 100%);
+  background: linear-gradient(90deg, #8b5cf6 0%, #c4b5fd 28%, #9ca3af 50%, #6ee7b7 72%,  #10b981 100%);
   opacity: 0.56;
   pointer-events: none;
 }
