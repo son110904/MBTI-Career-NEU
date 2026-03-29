@@ -41,6 +41,40 @@ const openaiClient = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
+const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || "")
+  .trim()
+  .replace(/\/$/, "");
+const OLLAMA_MODEL = (process.env.OLLAMA_MODEL || "").trim() || "gpt-oss:20b";
+
+function resolveAIProvider() {
+  const pref = String(process.env.AI_PROVIDER || "auto").trim().toLowerCase();
+  if (pref === "none") return "none";
+  if (pref === "ollama") return OLLAMA_BASE_URL ? "ollama" : "none";
+  if (pref === "openai") return openaiClient ? "openai" : "none";
+  if (pref === "auto") {
+    if (OLLAMA_BASE_URL) return "ollama";
+    if (openaiClient) return "openai";
+    return "none";
+  }
+  return "none";
+}
+
+function extractJsonCandidate(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return raw;
+
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return raw.slice(firstBrace, lastBrace + 1).trim();
+  }
+
+  return raw;
+}
+
 
 function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
@@ -293,6 +327,100 @@ function cleanSectionText(text) {
     .trim();
 }
 
+function stripLeadingTokensByNorm(text, normTokens) {
+  const raw = String(text || "").trim();
+  if (!raw) return raw;
+
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  if (tokens.length < normTokens.length) return raw;
+
+  for (let i = 0; i < normTokens.length; i += 1) {
+    if (normalizeHeading(tokens[i]) !== normTokens[i]) return raw;
+  }
+
+  return tokens.slice(normTokens.length).join(" ").trim();
+}
+
+function cleanBulletListText(text, mbtiType) {
+  if (!text) return text;
+
+  const rawLines = String(text)
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const items = [];
+  for (const rawLine of rawLines) {
+    const stripped = stripLeadingNumber(rawLine).trim();
+    if (!stripped) continue;
+
+    const isNewItem = stripped !== rawLine;
+    if (!items.length) {
+      items.push(stripped);
+      continue;
+    }
+
+    if (isNewItem) {
+      items.push(stripped);
+      continue;
+    }
+
+    // likely a wrapped continuation line
+    items[items.length - 1] = `${items[items.length - 1]} ${stripped}`.trim();
+  }
+
+  const mbti = String(mbtiType || "").trim().toUpperCase();
+  const cleanedItems = items
+    .map((item) => {
+      let s = String(item || "").replace(/\s+/g, " ").trim();
+      if (!s) return "";
+
+      // Drop stray heading fragments sometimes returned by LLMs
+      s = stripLeadingTokensByNorm(s, ["MOI", "TRUONG", "LAM", "VIEC", "PHU", "HOP"]);
+      s = stripLeadingTokensByNorm(s, ["LAM", "VIEC", "PHU", "HOP"]);
+
+      // Sometimes the model repeats MBTI code at the start of a bullet
+      if (mbti) {
+        const tokens = s.split(/\s+/);
+        if (normalizeHeading(tokens[0]) === mbti) {
+          s = tokens.slice(1).join(" ").trim();
+        }
+      }
+
+      return s;
+    })
+    .filter((item) => {
+      const norm = normalizeHeading(item);
+      return norm && norm !== "LAM VIEC PHU HOP" && norm !== "MOI TRUONG LAM VIEC PHU HOP";
+    });
+
+  return cleanedItems.join("\n").trim();
+}
+
+function cleanKhaiNiemText(text) {
+  let s = cleanSectionText(text);
+  if (!s) return s;
+
+  const head = s.slice(0, 140);
+  const dimHint =
+    /(Extraversion|Introversion|Sensing|Intuition|Thinking|Feeling|Judging|Perceiving|I\/E|E\/I|S\/N|N\/S|T\/F|F\/T|J\/P|P\/J)/i;
+
+  if (dimHint.test(head)) {
+    const closeParenIdx = head.indexOf(")");
+    if (closeParenIdx !== -1) {
+      s = s.slice(closeParenIdx + 1).trim();
+    } else {
+      // handle cases like: "Sensing : Thinking : Judging) ..." (missing opening parenthesis)
+      s = s.replace(/^[A-Za-z\s\/:,-]{0,80}\)\s*/u, "");
+      // or "Extraversion / Sensing / Thinking / Judging: ..." (no parens)
+      s = s.replace(/^[A-Za-z\s\/,-]{0,80}:\s+/u, "");
+    }
+  }
+
+  s = s.replace(/^\)\s*/u, "").trim();
+  return s;
+}
+
 /**
  * Parse the raw nganh_nghe_tuong_ung block into "Tên ngành: Nghề1, Nghề2" format.
  * Group headers (Lĩnh vực / Nhóm ngành) are preserved as section titles.
@@ -418,7 +546,7 @@ function cleanNganhNghe(text) {
   return output.join("\n").trim();
 }
 
-function normalizeSections(sections) {
+function normalizeSections(sections, mbtiType) {
   if (!sections || typeof sections !== "object") return null;
   const normalized = {};
   for (const def of SECTION_DEFS) {
@@ -427,15 +555,22 @@ function normalizeSections(sections) {
       if (def.key === "nganh_nghe_tuong_ung") {
         const cleaned = cleanNganhNghe(value);
         if (cleaned) normalized[def.key] = cleaned;
+      } else if (def.key === "khai_niem") {
+        const cleaned = cleanKhaiNiemText(value);
+        if (cleaned) normalized[def.key] = cleaned;
+      } else if (def.key === "diem_manh" || def.key === "diem_yeu" || def.key === "moi_truong") {
+        const cleaned = cleanBulletListText(value, mbtiType) || cleanSectionText(value);
+        if (cleaned) normalized[def.key] = cleaned;
       } else {
-        normalized[def.key] = cleanSectionText(value);
+        const cleaned = cleanSectionText(value);
+        if (cleaned) normalized[def.key] = cleaned;
       }
     }
   }
   return Object.keys(normalized).length ? normalized : null;
 }
 
-async function extractSectionsWithAI(text, mbtiType) {
+async function extractSectionsWithOpenAI(text, mbtiType) {
   if (!openaiClient) return null;
   try {
     const response = await openaiClient.responses.create({
@@ -517,11 +652,120 @@ async function extractSectionsWithAI(text, mbtiType) {
 
     const outputText = response.output_text || "";
     const parsed = JSON.parse(outputText);
-    return normalizeSections(parsed);
+    return normalizeSections(parsed, mbtiType);
   } catch (err) {
     console.error("[AI Extract] Loi:", err.message);
     return null;
   }
+}
+
+async function extractSectionsWithOllama(text, mbtiType) {
+  if (!OLLAMA_BASE_URL) return null;
+  if (typeof fetch !== "function") {
+    throw new Error("Node.js fetch khong san sang. Can Node 18+.");
+  }
+
+  const systemPrompt =
+    "Ban la bo may trich xuat du lieu. NHIEM VU: tra ve DUY NHAT 1 JSON object hop le (khong markdown, khong giai thich). " +
+    "JSON phai co dung 7 khoa sau (snake_case), moi gia tri la string: " +
+    "ten_tinh_cach, khai_niem, phan_tich_cac_chieu_tinh_cach, diem_manh, diem_yeu, moi_truong, nganh_nghe_tuong_ung. " +
+    "Neu khong tim thay muc nao, tra ve chuoi rong. Khong duoc them khoa khac.\n\n" +
+    "YEU CAU DINH DANG:\n" +
+    "- ten_tinh_cach: chi tra ve dung ma MBTI (vi du: \"ESTJ\").\n" +
+    "- khai_niem: 1 doan van tieng Viet mo ta tong quan. KHONG duoc bat dau bang danh sach (Extraversion/Sensing/Thinking/Judging) hay ky tu ngoac cua danh sach do.\n" +
+    "- phan_tich_cac_chieu_tinh_cach: moi chieu tren 1 dong, bat dau bang '- '.\n" +
+    "- diem_manh, diem_yeu, moi_truong: moi y tren 1 dong, bat dau bang '- '. KHONG duoc chen tieu de nhu 'Lam viec phu hop'.\n" +
+    "- nganh_nghe_tuong_ung: moi dong theo format 'Ten nganh: Nghe1, Nghe2'. Co the co dong tieu de nhom (Linh vuc/Nhom nganh).";
+
+  const userPrompt =
+    `Loai MBTI: ${mbtiType}\n` +
+    "Hay trich xuat cac muc tu van tu van ban duoi day va tra ve JSON.\n\n" +
+    "VAN BAN:\n" +
+    text;
+
+  const chatUrl = `${OLLAMA_BASE_URL}/api/chat`;
+  const generateUrl = `${OLLAMA_BASE_URL}/api/generate`;
+
+  const tryChat = async () => {
+    const resp = await fetch(chatUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        stream: false,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        options: { temperature: 0 },
+      }),
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      const err = new Error(`Ollama /api/chat loi ${resp.status}: ${body.slice(0, 200)}`);
+      err.status = resp.status;
+      throw err;
+    }
+
+    const data = await resp.json();
+    const content = data?.message?.content ?? "";
+    return content;
+  };
+
+  const tryGenerate = async () => {
+    const resp = await fetch(generateUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        stream: false,
+        prompt: `${systemPrompt}\n\n${userPrompt}`,
+        options: { temperature: 0 },
+      }),
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      throw new Error(`Ollama /api/generate loi ${resp.status}: ${body.slice(0, 200)}`);
+    }
+
+    const data = await resp.json();
+    const content = data?.response ?? "";
+    return content;
+  };
+
+  try {
+    let content = "";
+    try {
+      content = await tryChat();
+    } catch (err) {
+      const status = err?.status;
+      if (status === 404 || status === 405) {
+        content = await tryGenerate();
+      } else {
+        // fallback if /api/chat blocked by proxy but still have /api/generate
+        try {
+          content = await tryGenerate();
+        } catch (fallbackErr) {
+          throw err;
+        }
+      }
+    }
+
+    const jsonCandidate = extractJsonCandidate(content);
+    const parsed = JSON.parse(jsonCandidate);
+    return normalizeSections(parsed, mbtiType);
+  } catch (err) {
+    console.error("[Ollama Extract] Loi:", err.message);
+    return null;
+  }
+}
+
+async function extractSectionsWithAI(text, mbtiType, provider) {
+  if (provider === "openai") return extractSectionsWithOpenAI(text, mbtiType);
+  if (provider === "ollama") return extractSectionsWithOllama(text, mbtiType);
+  return null;
 }
 
 
@@ -560,17 +804,18 @@ app.get("/api/ai-consultation", async (req, res) => {
       return res.status(500).json({ error: "Du lieu DOCX trong hoac khong trich xuat duoc van ban." });
     }
 
-    const heuristicSections = normalizeSections(extractSectionsByHeadings(text));
+    const heuristicSections = normalizeSections(extractSectionsByHeadings(text), mbtiType);
     const useAIParam = String(req.query.useAI || "").toLowerCase();
-    const useAI = openaiClient && useAIParam !== "false";
-    const aiSections = useAI ? await extractSectionsWithAI(text, mbtiType) : null;
+    const provider = resolveAIProvider();
+    const useAI = provider !== "none" && useAIParam !== "false";
+    const aiSections = useAI ? await extractSectionsWithAI(text, mbtiType, provider) : null;
     const sections = aiSections || heuristicSections;
 
     return res.json({
       mbtiType,
       consultation: text,
       sections,
-      sections_source: aiSections ? "ai" : heuristicSections ? "heuristic" : "none",
+      sections_source: aiSections ? `ai:${provider}` : heuristicSections ? "heuristic" : "none",
       objectName: objectNameUsed,
     });
   } catch (err) {

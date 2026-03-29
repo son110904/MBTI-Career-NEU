@@ -12,12 +12,18 @@ Công cụ trắc nghiệm MBTI dành cho sinh viên **Đại học Kinh tế Qu
 ## Chạy dự án
 
 ```bash
-cd Tools/MBTI-Career-NEU
 npm install
 npm run dev
 ```
 
 Mở trình duyệt tại: **http://localhost:3001**
+
+## Cấu hình AI (không cần API key)
+
+- Dùng Ollama server: cấu hình trong `.env`:
+  - `AI_PROVIDER=ollama`
+  - `OLLAMA_BASE_URL=https://research.neu.edu.vn/ollama`
+  - `OLLAMA_MODEL` chọn theo danh sách model ở `.../ollama/api/tags`
 
 ## Build
 
