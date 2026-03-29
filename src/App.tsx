@@ -77,6 +77,17 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  // DEV ONLY: random-fill all answers for quick testing
+  const handleRandomFill = useCallback(() => {
+    const random: AnswerRecord = {};
+    for (const q of MBTI_QUESTIONS) {
+      random[q.id] = Math.floor(Math.random() * 7) + 1;
+    }
+    setAnswers(random);
+    setQuizNotice(null);
+    setShowMissingState(false);
+  }, []);
+
   const resultType = step === "result" ? computeMBTI(answers) : null;
   const resultInfo = resultType ? MBTI_TYPE_INFO[resultType] : null;
   const mainClassName =
@@ -101,6 +112,7 @@ export default function App() {
             showMissingState={showMissingState}
             onAnswer={handleAnswer}
             onViewResult={viewResult}
+            onRandomFill={handleRandomFill}
           />
         )}
 
@@ -176,6 +188,7 @@ function Quiz({
   showMissingState,
   onAnswer,
   onViewResult,
+  onRandomFill,
 }: {
   questions: MBTIQuestion[];
   answers: AnswerRecord;
@@ -185,6 +198,7 @@ function Quiz({
   showMissingState: boolean;
   onAnswer: (questionId: string, rating: number) => void;
   onViewResult: () => void;
+  onRandomFill: () => void;
 }) {
   const remainingCount = questions.length - answeredCount;
 
@@ -205,6 +219,19 @@ function Quiz({
             <SummaryStat label="Còn lại" value={`${remainingCount}`} tone="amber" />
           </div>
         </div>
+
+        {/* ⚠️ DEV ONLY – XÓA TRƯỚC KHI DEPLOY: nút random fill để test nhanh */}
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 px-4 py-3">
+          <span className="text-xs font-semibold text-orange-600">🧪 Chế độ thử nghiệm</span>
+          <button
+            type="button"
+            onClick={onRandomFill}
+            className="ml-auto rounded-md bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600"
+          >
+            Random 20 câu
+          </button>
+        </div>
+        {/* ⚠️ DEV ONLY – XÓA TRƯỚC KHI DEPLOY: nút random fill để test nhanh */}
 
         <div className="mt-5">
           <div className="flex items-center justify-between text-sm font-medium text-slate-600">
@@ -824,24 +851,28 @@ function toBullets(value: SectionValue): string[] {
   return text ? [text] : [];
 }
 
+function capitalizeAfterColon(str: string): string {
+  return str.replace(/:\s+([a-z\u00C0-\u024F\u1E00-\u1EFF])/g, (_, c) => `: ${c.toUpperCase()}`);
+}
+
 function formatDimensionLine(line: string) {
   const trimmed = line.trim();
   if (!trimmed) return "";
 
-  const formattedMatch = trimmed.match(/^([A-Za-z]+)\s*[-–—]\s*\(([^)]+)\)\s*:\s*(.+)$/);
+  const formattedMatch = trimmed.match(/^([A-Za-z]+)\s*[-\u2013\u2014]\s*\(([^)]+)\)\s*:\s*(.+)$/);
   if (formattedMatch) {
     const [, dim, vn, rest] = formattedMatch;
-    return `${dim} – (${vn.trim()}): ${rest.trim()}`;
+    return capitalizeAfterColon(`${dim} \u2013 (${vn.trim()}): ${capitalizeFirst(rest.trim())}`);
   }
 
-  const match = trimmed.match(/^([A-Za-z]+)\s*[-–—]\s*(.+)$/);
+  const match = trimmed.match(/^([A-Za-z]+)\s*[-\u2013\u2014]\s*(.+)$/);
   if (!match) return trimmed;
 
   const [, dim, restRaw] = match;
   const rest = restRaw.trim();
   if (!rest) return trimmed;
 
-  if (rest.startsWith("(")) return `${dim} – ${rest}`;
+  if (rest.startsWith("(")) return `${dim} \u2013 ${rest}`;
 
   const words = rest.split(/\s+/).filter(Boolean);
   if (words.length < 2) return trimmed;
@@ -849,26 +880,11 @@ function formatDimensionLine(line: string) {
   const first = words[0];
   const firstNorm = normalizeForMatch(first);
   const stopStarts = new Set([
-    "ho",
-    "cac",
-    "nhung",
-    "nguoi",
-    "istj",
-    "intj",
-    "intp",
-    "entj",
-    "entp",
-    "infj",
-    "infp",
-    "enfj",
-    "enfp",
-    "istp",
-    "isfp",
-    "estj",
-    "estp",
-    "esfj",
-    "esfp",
-    "isfj",
+    "ho", "cac", "nhung", "nguoi",
+    "istj", "intj", "intp", "entj", "entp",
+    "infj", "infp", "enfj", "enfp",
+    "istp", "isfp", "estj", "estp",
+    "esfj", "esfp", "isfj",
   ]);
   if (stopStarts.has(firstNorm) || /^[A-Z]{4}$/.test(first)) return trimmed;
 
@@ -876,7 +892,14 @@ function formatDimensionLine(line: string) {
   const description = words.slice(2).join(" ").trim();
   if (!description) return trimmed;
 
-  return `${dim} – (${vn}): ${description}`;
+  return capitalizeAfterColon(`${dim} \u2013 (${vn}): ${capitalizeFirst(description)}`);
+}
+
+// Detect a bare dimension header line like "Introversion / Extraversion (I/E)"
+// — no Vietnamese description following the abbreviation pair.
+function isDimHeader(line: string): boolean {
+  // Matches patterns: "Extraversion / Introversion (E/I)" or "Sensing/Intuition (S/N)" etc.
+  return /^(Introversion|Extraversion|Sensing|Intuition|Thinking|Feeling|Judging|Perceiving)(\s*[/\/]\s*(Introversion|Extraversion|Sensing|Intuition|Thinking|Feeling|Judging|Perceiving))?\s*\([A-Z]\/[A-Z]\)\s*$/i.test(line.trim());
 }
 
 function renderDimensionAnalysis(value: SectionValue) {
@@ -884,11 +907,28 @@ function renderDimensionAnalysis(value: SectionValue) {
   if (lines.length <= 1) {
     lines = toBullets(value);
   }
-  const normalized = lines.map(formatDimensionLine).filter(Boolean);
+
+  // Merge bare dimension headers with the description line that follows them
+  const merged: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (isDimHeader(line) && i + 1 < lines.length) {
+      const next = lines[i + 1].trim();
+      if (next) {
+        merged.push(`${line}: ${next}`);
+        i++; // skip the description line we just consumed
+        continue;
+      }
+    }
+    merged.push(line);
+  }
+
+  const normalized = merged.map(formatDimensionLine).filter(Boolean);
 
   if (!normalized.length) return null;
   return (
-    <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-700">
+    <ul className="list-disc space-y-2 pl-5 leading-relaxed text-slate-700">
       {normalized.map((item, idx) => (
         <li key={`dim-${idx}`}>{item}</li>
       ))}
@@ -896,178 +936,288 @@ function renderDimensionAnalysis(value: SectionValue) {
   );
 }
 
-function renderNganhNghe(value: SectionValue) {
-  const stripBulletPrefix = (line: string) => line.replace(/^[-–•]\s+/, "").trim();
-  const lines = toLines(value).map(stripBulletPrefix).filter(Boolean);
-  if (!lines.length) return null;
+// ── Icon map cho lĩnh vực ────────────────────────────────────────────────────
+const SECTOR_ICONS: Record<string, string> = {
+  "tài chính": "💰", "finance": "💰", "ngân hàng": "🏦",
+  "kế toán": "📊", "kinh doanh": "💼", "quản trị": "🏢",
+  "marketing": "📣", "truyền thông": "📢", "báo chí": "📰",
+  "công nghệ": "💻", "cntt": "💻", "it": "💻", "kỹ thuật": "⚙️",
+  "giáo dục": "🎓", "đào tạo": "🎓",
+  "y tế": "🏥", "sức khỏe": "💊",
+  "luật": "⚖️", "pháp lý": "⚖️",
+  "nghệ thuật": "🎨", "thiết kế": "🎨",
+  "du lịch": "✈️", "khách sạn": "🏨",
+  "xây dựng": "🏗️", "kiến trúc": "🏛️",
+  "nông nghiệp": "🌱", "môi trường": "🌿",
+  "khoa học": "🔬", "nghiên cứu": "🔭",
+  "nhân sự": "👥", "hr": "👥",
+  "sản xuất": "🏭", "logistics": "📦",
+  "tâm lý": "🧠", "xã hội": "🤝",
+};
 
-  const normalizedLines = lines.map(normalizeForMatch);
-  const hasOldHeading =
-    normalizedLines.some((line) => line === "nganh tai neu") &&
-    normalizedLines.some((line) => line === "nghe nghiep tuong ung");
-  const hasInlineJobs = lines.some((line) => /Nghề\s+nghiệp\s+tương\s+ứng\s*[:\-]/i.test(line));
-  if (hasOldHeading && !hasInlineJobs) {
-    return (
-      <div className="space-y-1">
-        {lines.map((line, idx) => {
-          const normalized = normalizeForMatch(line);
-          const isHeading =
-            normalized.startsWith("nganh tai neu") ||
-            normalized.startsWith("nghe nghiep tuong ung") ||
-            normalized.startsWith("nganh, nghe tuong ung");
-          return (
-            <p key={`${idx}-${line}`} className="leading-relaxed text-slate-700">
-              {isHeading ? <strong>{line}</strong> : line}
-            </p>
-          );
-        })}
-      </div>
-    );
+function getSectorIcon(title: string): string {
+  const lower = title.toLowerCase();
+  for (const [key, icon] of Object.entries(SECTOR_ICONS)) {
+    if (lower.includes(key)) return icon;
   }
+  return "📋";
+}
 
-  const isGroupHeaderLine = (line: string) => {
-    const normalized = normalizeForMatch(line);
+function parseNganhNgheData(value: SectionValue) {
+  type NganhBlock = { name: string; nghe: string[] };
+  type LinhVucBlock = { title: string; nganh: NganhBlock[] };
+
+  const rawLines = toLines(value);
+  const sectors: LinhVucBlock[] = [];
+  let curSector: LinhVucBlock | null = null;
+
+  // Mirror backend isGroupHeader logic (no diacritics)
+  const stripDia = (s: string) =>
+    s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+
+  const isGroupHeader = (line: string) => {
+    const lower = stripDia(line);
     return (
-      normalized.startsWith("nhom nganh") ||
-      normalized.startsWith("linh vuc") ||
-      normalized.startsWith("khoi nganh") ||
-      normalized.startsWith("nhom linh vuc")
+      lower.startsWith("nhom nganh") ||
+      lower.startsWith("linh vuc") ||
+      lower.startsWith("khoi nganh") ||
+      lower.startsWith("nhom linh vuc") ||
+      // also catch "## Lĩnh vực: ..." from AI providers that skip cleanNganhNghe
+      /^##\s+/i.test(line)
     );
   };
-  const jobsHeaderRe = /Nghề\s+nghiệp\s+tương\s+ứng\s*[:\-]?\s*/i;
-  const codeRe = /\(([\d][\w_.]*(?:_[\w.]+)*)\)/;
-  const splitJobs = (text: string) =>
-    text
-      .split(/[,;]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
 
-  type NganhItem = { major: string; jobs: string[] };
-  type NganhGroup = { title?: string; items: NganhItem[] };
+  const extractGroupTitle = (line: string) =>
+    line
+      .replace(/^##\s+/i, "")
+      // strip "Lĩnh vực:", "Nhóm ngành:", "Khối ngành:" prefix (with or without diacritics)
+      .replace(/^(L[iĩ]nh\s+v[uư]c|Nh[oó]m\s+ng[aà]nh|Kh[oô]i\s+ng[aà]nh|Nh[oó]m\s+l[iĩ]nh\s+v[uư]c)\s*[:：]?\s*/iu, "")
+      .trim();
 
-  const groups: NganhGroup[] = [];
-  let currentGroup: NganhGroup = { title: undefined, items: [] };
-  let currentItem: NganhItem | null = null;
-  let lastWasJobs = false;
-
-  const flushItem = () => {
-    if (currentItem && (currentItem.major || currentItem.jobs.length)) {
-      currentGroup.items.push(currentItem);
-    }
-    currentItem = null;
-    lastWasJobs = false;
-  };
-  const flushGroup = () => {
-    flushItem();
-    if (currentGroup.title || currentGroup.items.length) groups.push(currentGroup);
-    currentGroup = { title: undefined, items: [] };
-    lastWasJobs = false;
+  const flushSector = () => {
+    if (curSector) { sectors.push(curSector); curSector = null; }
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  for (const raw of rawLines) {
+    const line = raw.trim();
     if (!line) continue;
 
-    if (isGroupHeaderLine(line)) {
-      flushGroup();
-      currentGroup.title = line;
+    // ── Group header (sector) ────────────────────────────────────────────────
+    if (isGroupHeader(line)) {
+      flushSector();
+      curSector = { title: extractGroupTitle(line), nganh: [] };
       continue;
     }
 
-    if (jobsHeaderRe.test(line)) {
-      const jobsText = line.replace(jobsHeaderRe, "").trim();
-      if (!currentItem) currentItem = { major: "", jobs: [] };
-      if (jobsText) currentItem.jobs.push(...splitJobs(jobsText));
-      lastWasJobs = true;
+    // ── "Ngành (code): Nghề1, Nghề2, ..." — main backend format ─────────────
+    // Also handles "### Ngành: ..." from AI providers
+    if (line.includes(":")) {
+      // Strip "### Ngành:" prefix if present
+      const cleanLine = line.replace(/^###\s+Ng[aà]nh\s*[:：]\s*/i, "");
+      const colonIdx = cleanLine.indexOf(":");
+      const left = cleanLine.slice(0, colonIdx)
+        .replace(/\s*\([^)]*\)\s*/g, "") // strip mã ngành in parens
+        .trim();
+      const right = cleanLine.slice(colonIdx + 1).trim();
+
+      // If left looks like it's still a group header (e.g. from AI format), treat as sector
+      if (isGroupHeader(left)) {
+        flushSector();
+        curSector = { title: extractGroupTitle(left), nganh: [] };
+        if (right) {
+          // Unlikely but handle gracefully
+          curSector.nganh.push({ name: "", nghe: right.split(/[,;]+/).map(j => j.trim()).filter(Boolean) });
+        }
+        continue;
+      }
+
+      if (!curSector) curSector = { title: "", nganh: [] };
+      const nghe = right ? right.split(/[,;]+/).map(j => j.trim()).filter(Boolean) : [];
+      curSector.nganh.push({ name: left, nghe });
       continue;
     }
 
-    if (codeRe.test(line) && line.includes(":")) {
-      const [majorPart, jobsPartRaw] = line.split(/:(.+)/).map((part) => part.trim());
-      const jobsPart = jobsPartRaw ? jobsPartRaw.trim() : "";
-      flushItem();
-      currentItem = { major: majorPart || line, jobs: jobsPart ? splitJobs(jobsPart) : [] };
-      lastWasJobs = false;
+    // ── Bullet "- Nghề" (AI provider format) ────────────────────────────────
+    const bulletMatch = line.match(/^[-–•]\s+(.+)/);
+    if (bulletMatch) {
+      if (!curSector) curSector = { title: "", nganh: [] };
+      // Attach to last nganh, or create anonymous one
+      if (!curSector.nganh.length) curSector.nganh.push({ name: "", nghe: [] });
+      curSector.nganh[curSector.nganh.length - 1].nghe.push(bulletMatch[1].trim());
       continue;
     }
 
-    const isMajor = codeRe.test(line);
-    if (isMajor) {
-      flushItem();
-      currentItem = { major: line, jobs: [] };
-      lastWasJobs = false;
+    // ── "### Ngành: Tên" without jobs (AI format) ───────────────────────────
+    const nganhOnlyMatch = line.match(/^###\s+Ng[aà]nh\s*[:：]\s*(.+)/i);
+    if (nganhOnlyMatch) {
+      if (!curSector) curSector = { title: "", nganh: [] };
+      const name = nganhOnlyMatch[1].replace(/\s*\([^)]*\)\s*/g, "").trim();
+      curSector.nganh.push({ name, nghe: [] });
       continue;
     }
 
-    if (currentItem && lastWasJobs) {
-      currentItem.jobs.push(...splitJobs(line));
-      continue;
+    // ── Plain line with no colon/bullet — treat as sector if nothing open ───
+    if (!curSector) {
+      curSector = { title: line, nganh: [] };
+    } else if (curSector.nganh.length === 0) {
+      // Might be an inline job list for an unnamed major
+      curSector.nganh.push({
+        name: "",
+        nghe: line.split(/[,;]+/).map(j => j.trim()).filter(Boolean),
+      });
     }
-
-    if (currentItem && !currentItem.jobs.length) {
-      currentItem.major = `${currentItem.major} ${line}`.trim();
-      continue;
-    }
-
-    flushItem();
-    currentItem = { major: line, jobs: [] };
-    lastWasJobs = false;
   }
-  flushGroup();
+  flushSector();
+  return { sectors, rawLines };
+}
 
-  if (!groups.length) {
+function SectorBlock({ sector, si }: { sector: { title: string; nganh: { name: string; nghe: string[] }[] }; si: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const icon = getSectorIcon(sector.title);
+
+  // Only show nganh entries that actually have content
+  const validNganh = sector.nganh.filter((n) => n.nghe.length > 0 || n.name);
+  const previewNganh = validNganh.slice(0, 3).map(n => n.name).filter(Boolean);
+  const previewNghe = validNganh.flatMap(n => n.nghe).slice(0, 5);
+  const totalNghe = validNganh.flatMap(n => n.nghe).length;
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 flex items-center gap-2">
+        <span className="text-xl">{icon}</span>
+        <h5 className="font-semibold text-amber-900 flex-1">{sector.title || `Lĩnh vực ${si + 1}`}</h5>
+      </div>
+
+      {/* Summary (always visible) */}
+      <div className="px-4 pb-3 space-y-2">
+        {previewNganh.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">🎓 Ngành tiêu biểu (NEU):</p>
+            <ul className="space-y-0.5">
+              {previewNganh.map((n, i) => (
+                <li key={i} className="text-sm text-amber-900 flex items-start gap-1">
+                  <span className="mt-1 text-amber-400">•</span> {n}
+                </li>
+              ))}
+              {sector.nganh.length > 3 && (
+                <li className="text-xs text-amber-500 italic">+{sector.nganh.length - 3} ngành khác…</li>
+              )}
+            </ul>
+          </div>
+        )}
+        {previewNghe.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">💼 Nghề phổ biến:</p>
+            <ul className="space-y-0.5">
+              {previewNghe.map((j, i) => (
+                <li key={i} className="text-sm text-amber-900 flex items-start gap-1">
+                  <span className="mt-1 text-amber-400">•</span> {j}
+                </li>
+              ))}
+              {totalNghe > 5 && (
+                <li className="text-xs text-amber-500 italic">+{totalNghe - 5} nghề khác…</li>
+              )}
+            </ul>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
+        >
+          {expanded ? "▲ Thu gọn" : "▼ Xem chi tiết"}
+        </button>
+      </div>
+
+      {/* Full tree (collapsed by default) */}
+      {expanded && (
+        <div className="border-t border-amber-200 bg-white px-4 py-4 space-y-3">
+          <p className="text-sm font-bold text-slate-800">{sector.title || `Lĩnh vực ${si + 1}`}</p>
+          {validNganh.map((nganh, ni) => (
+            <div key={`detail-${si}-${ni}`} className="pl-2 border-l-2 border-indigo-200">
+              {nganh.name && (
+                <p className="text-sm font-semibold text-slate-700 mb-1">{nganh.name}</p>
+              )}
+              <ul className="space-y-0.5">
+                {nganh.nghe.map((job, ji) => (
+                  <li key={ji} className="text-sm text-slate-600 flex items-start gap-1.5">
+                    <span className="text-slate-400 shrink-0">├──</span> {job}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderNganhNghe(value: SectionValue) {
+  const { sectors, rawLines } = parseNganhNgheData(value);
+
+  // Drop sectors that have no nganh entries with actual content
+  const nonEmpty = sectors.filter(
+    (s) => s.nganh.length > 0 && s.nganh.some((n) => n.nghe.length > 0 || n.name)
+  );
+
+  if (!nonEmpty.length) {
     return (
-      <div className="space-y-1">
-        {lines.map((line, idx) => (
-          <p key={`${idx}-${line}`} className="leading-relaxed text-slate-700">
-            {line}
-          </p>
-        ))}
+      <div className="space-y-1 leading-relaxed text-slate-700">
+        {rawLines.map((l, i) => <p key={i}>{l}</p>)}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {groups.map((group, idx) => (
-        <div key={`group-${idx}`} className="space-y-2">
-          {group.title && <p className="font-semibold text-slate-800">{group.title}</p>}
-          <div className="space-y-3">
-            {group.items.map((item, itemIdx) => (
-              <div
-                key={`item-${idx}-${itemIdx}`}
-                className="rounded-lg border border-slate-100 bg-slate-50/40 px-3 py-2"
-              >
-                {item.major && <p className="font-medium text-slate-800">{item.major}</p>}
-                {item.jobs.length > 0 && (
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-slate-700">
-                    {item.jobs.map((job, jobIdx) => (
-                      <li key={`job-${idx}-${itemIdx}-${jobIdx}`}>{job}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+    <div className="space-y-3">
+      {nonEmpty.map((sector, si) => (
+        <SectorBlock key={`sector-${si}`} sector={sector} si={si} />
       ))}
     </div>
   );
 }
 
-function renderSectionContent(key: string, value: SectionValue) {
+function capitalizeFirst(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function renderSectionContent(key: string, value: SectionValue, mbtiType?: string, _nameVi?: string) {
   if (key === "phan_tich_cac_chieu_tinh_cach") {
     return renderDimensionAnalysis(value);
   }
   if (key === "nganh_nghe_tuong_ung") {
     return renderNganhNghe(value);
   }
+  if (key === "khai_niem") {
+    const raw = Array.isArray(value) ? value.join("\n") : value;
+    // Normalize: always start with "XXXX là nhóm tính cách..."
+    // Backend may have stripped the prefix already, leaving "là nhóm..." bare.
+    let body = raw.replace(/^[A-Z]{4}\s*[–\-:]\s*/u, "").trim();
+    if (mbtiType) {
+      if (/^là\s/i.test(body)) {
+        // "là nhóm..." → prepend type code
+        body = `${mbtiType} ${body}`;
+      } else if (!/^[A-Z]{4}/u.test(body)) {
+        // No type prefix at all → add full lead-in
+        body = `${mbtiType} là nhóm tính cách ${body.replace(/^là\s+(nhóm\s+tính\s+cách\s+)?/i, "")}`;
+      }
+    }
+    return (
+      <p className="whitespace-pre-wrap leading-relaxed text-slate-700">
+        {body}
+      </p>
+    );
+  }
   if (BULLET_SECTION_KEYS.has(key)) {
     const bullets = toBullets(value);
     return (
       <ul className="list-disc space-y-1 pl-5 leading-relaxed text-slate-700">
         {bullets.map((item, idx) => (
-          <li key={`${key}-${idx}`}>{item}</li>
+          <li key={`${key}-${idx}`}>{capitalizeFirst(item)}</li>
         ))}
       </ul>
     );
@@ -1239,7 +1389,7 @@ function Result({
                 return (
                 <section key={item.key} className={`space-y-2 rounded-lg border px-4 py-3 ${tone.card}`}>
                   <h4 className={`text-sm font-semibold ${tone.title}`}>{item.label}</h4>
-                  {renderSectionContent(item.key, consultationSections[item.key] as SectionValue)}
+                  {renderSectionContent(item.key, consultationSections[item.key] as SectionValue, type, nameVi)}
                 </section>
                 );
               })}

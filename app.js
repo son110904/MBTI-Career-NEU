@@ -387,6 +387,11 @@ function cleanBulletListText(text, mbtiType) {
         }
       }
 
+      // Viết hoa chữ cái đầu mỗi ý
+      if (s.length > 0) {
+        s = s.charAt(0).toUpperCase() + s.slice(1);
+      }
+
       return s;
     })
     .filter((item) => {
@@ -418,6 +423,12 @@ function cleanKhaiNiemText(text) {
   }
 
   s = s.replace(/^\)\s*/u, "").trim();
+
+  // Strip MBTI type code lặp đầu khai_niem: "INFJ – INFJ là..." -> "Là..."
+  // hoặc solo prefix "INFJ – " (frontend tự thêm prefix riêng)
+  s = s.replace(/^([A-Z]{4})\s*[-–—]\s*\1\b\s*/u, '').trim();
+  s = s.replace(/^[A-Z]{4}\s*[-–—]\s*/u, '').trim();
+
   return s;
 }
 
@@ -599,23 +610,26 @@ async function extractSectionsWithOpenAI(text, mbtiType) {
 
             "**diem_manh**: Lấy phần điểm mạnh (là mục số 3. trong tài liệu). " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. " +
-            "Mỗi điểm mạnh trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách).\n\n" +
+            "Mỗi điểm mạnh trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách). Viết hoa chữ cái đầu tiên của mỗi ý.\n\n" +
 
             "**diem_yeu**: Lấy phần hạn chế (là mục số 4. trong tài liệu). " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. " +
-            "Mỗi hạn chế trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách).\n\n" +
+            "Mỗi hạn chế trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách). Viết hoa chữ cái đầu tiên của mỗi ý.\n\n" +
 
             "**moi_truong**: Lấy phần môi trường làm việc phù hợp (thường là mục số 5 trong tài liệu). " +
             "Bỏ tiêu đề mục và tất cả số thứ tự đầu dòng. " +
-            "Mỗi ý trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách).\n\n" +
+            "Mỗi ý trình bày trên một dòng, BẮT BUỘC bắt đầu bằng dấu '- ' (gạch ngang cách). Viết hoa chữ cái đầu tiên của mỗi ý.\n\n" +
 
-            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề trong tài liệu. " +
-            "Nếu tài liệu có tiêu đề nhóm ngành/lĩnh vực (ví dụ: 'Lĩnh vực Kinh doanh', 'Nhóm ngành Kinh tế'), GIỮ nguyên dòng đó như tiêu đề nhóm. " +
-            "Với mỗi ngành, xuất ĐÚNG 1 dòng theo format: Tên ngành: Nghề1, Nghề2, Nghề3\n" +
-            "Ví dụ: Quản trị kinh doanh: Trưởng phòng kinh doanh, Key Account Manager, Chuyên viên marketing\n" +
-            "TUYỆT ĐỐI KHÔNG dùng 'Nghề nghiệp tương ứng:' trên dòng riêng. " +
-            "TUYỆT ĐỐI KHÔNG tách thành 2 danh sách riêng. " +
-            "Không để số thứ tự (6.1, 6.2.1...) và không giữ mã ngành trong ngoặc.\n\n" +
+            "**nganh_nghe_tuong_ung**: Lấy toàn bộ danh mục ngành nghề trong tài liệu theo cấu trúc 3 tầng.\n" +
+            "TẦNG 1 – Lĩnh vực: bắt đầu bằng '## Lĩnh vực: Tên lĩnh vực'\n" +
+            "TẦNG 2 – Ngành: bắt đầu bằng '### Ngành: Tên ngành' (bỏ hết mã số trong ngoặc)\n" +
+            "TẦNG 3 – Nghề nghiệp: mỗi nghề trên 1 dòng bắt đầu bằng '- '\n" +
+            "Ví dụ:\n" +
+            "## Lĩnh vực: Kinh doanh và quản lý\n" +
+            "### Ngành: Quản trị kinh doanh\n" +
+            "- Trưởng phòng kinh doanh\n" +
+            "- Key Account Manager\n" +
+            "KHÔNG ghi mã ngành (7340101...). KHÔNG dùng 'Nghề nghiệp tương ứng:' riêng dòng.\n\n" +
 
             "## TÀI LIỆU\n" +
             text,
@@ -675,7 +689,7 @@ async function extractSectionsWithOllama(text, mbtiType) {
     "- khai_niem: 1 doan van tieng Viet mo ta tong quan. KHONG duoc bat dau bang danh sach (Extraversion/Sensing/Thinking/Judging) hay ky tu ngoac cua danh sach do.\n" +
     "- phan_tich_cac_chieu_tinh_cach: moi chieu tren 1 dong, bat dau bang '- '.\n" +
     "- diem_manh, diem_yeu, moi_truong: moi y tren 1 dong, bat dau bang '- '. KHONG duoc chen tieu de nhu 'Lam viec phu hop'.\n" +
-    "- nganh_nghe_tuong_ung: moi dong theo format 'Ten nganh: Nghe1, Nghe2'. Co the co dong tieu de nhom (Linh vuc/Nhom nganh).";
+    "- nganh_nghe_tuong_ung: cu phap 3 tang: '## Linh vuc: Ten' -> '### Nganh: Ten' -> '- Nghe nghiep'. Bo ma so nganh. Moi nghe tren 1 dong bat dau bang '- '.";
 
   const userPrompt =
     `Loai MBTI: ${mbtiType}\n` +
