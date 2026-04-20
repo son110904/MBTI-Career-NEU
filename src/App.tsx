@@ -77,6 +77,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  // save mbti pick vao postgre
+  const saveMBTI = async () => {
+  await fetch('http://localhost:3000/save-mbti', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_name: 'An',
+      mbti_result: 'INTJ',
+    }),
+  });
+};
+
   // DEV ONLY: random-fill all answers for quick testing
   const handleRandomFill = useCallback(() => {
     const random: AnswerRecord = {};
