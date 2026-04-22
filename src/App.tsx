@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, type CSSProperties } from "react";
+import { useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { MBTI_QUESTIONS, MBTI_TYPE_INFO } from "./mbti-data";
 import type { MBTIQuestion } from "./mbti-data";
 import { computeMBTI, computeMBTIScores, type AnswerRecord } from "./mbti-score";
@@ -7,7 +7,7 @@ type Step = "intro" | "quiz" | "result";
 type SectionValue = string | string[];
 
 const totalQuestions = MBTI_QUESTIONS.length;
-const API_BASE = (import.meta.env.VITE_API_BASE ?? "https://mbti-career-neu.vercel.app").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_BASE ?? window.location.origin).replace(/\/$/, "");
 const BULLET_SECTION_KEYS = new Set(["diem_manh", "diem_yeu", "moi_truong"]);
 const QUIZ_SCALE_OPTIONS = [
   { value: 1, size: 38, color: "#8b5cf6", glow: "rgba(139, 92, 246, 0.24)", label: "Hoàn toàn không đồng ý" },
@@ -24,6 +24,8 @@ export default function App() {
   const [answers, setAnswers] = useState<AnswerRecord>({});
   const [quizNotice, setQuizNotice] = useState<string | null>(null);
   const [showMissingState, setShowMissingState] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userProfileId, setUserProfileId] = useState("");
 
   const answeredCount = Object.keys(answers).length;
   const progress = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
@@ -62,12 +64,16 @@ export default function App() {
   }, [answers, scrollToQuestion]);
 
   const handleStart = useCallback(() => {
+    if (!userName.trim() || !userProfileId.trim()) {
+      setQuizNotice("Vui lòng nhập đầy đủ Tên và Mã hồ sơ trước khi bắt đầu làm bài.");
+      return;
+    }
     setStep("quiz");
     setAnswers({});
     setQuizNotice(null);
     setShowMissingState(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [userName, userProfileId]);
 
   const handleRetry = useCallback(() => {
     setStep("intro");
@@ -77,19 +83,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // save mbti pick vao postgre
-  const saveMBTI = async () => {
-  await fetch('http://localhost:3000/save-mbti', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      user_name: 'An',
-      mbti_result: 'INTJ',
-    }),
-  });
-};
+  // NOTE: DB save is handled in Result step (POST /api/mbti/sessions)
 
   // DEV ONLY: random-fill all answers for quick testing
   const handleRandomFill = useCallback(() => {
@@ -114,7 +108,16 @@ export default function App() {
           <h1 className="text-2xl font-bold text-slate-800">Trắc nghiệm MBTI hướng nghiệp</h1>
           <p className="mt-1 text-sm text-slate-600 sm:text-base">Tra cứu nhóm tính cách và gợi ý nghề nghiệp tại NEU</p>
         </header>
-        {step === "intro" && <Intro onStart={handleStart} />}
+        {step === "intro" && (
+          <Intro
+            onStart={handleStart}
+            notice={quizNotice}
+            userName={userName}
+            userProfileId={userProfileId}
+            onChangeUserName={setUserName}
+            onChangeUserProfileId={setUserProfileId}
+          />
+        )}
 
         {step === "quiz" && (
           <Quiz
@@ -131,7 +134,14 @@ export default function App() {
         )}
 
         {step === "result" && resultInfo && resultType && (
-          <Result info={resultInfo} mbtiType={resultType} answers={answers} onRetry={handleRetry} />
+          <Result
+            info={resultInfo}
+            mbtiType={resultType}
+            answers={answers}
+            userName={userName}
+            userProfileId={userProfileId}
+            onRetry={handleRetry}
+          />
         )}
       </main>
 
@@ -142,7 +152,21 @@ export default function App() {
   );
 }
 
-function Intro({ onStart }: { onStart: () => void }) {
+function Intro({
+  onStart,
+  notice,
+  userName,
+  userProfileId,
+  onChangeUserName,
+  onChangeUserProfileId,
+}: {
+  onStart: () => void;
+  notice: string | null;
+  userName: string;
+  userProfileId: string;
+  onChangeUserName: (value: string) => void;
+  onChangeUserProfileId: (value: string) => void;
+}) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <div className="space-y-6">
@@ -180,6 +204,35 @@ function Intro({ onStart }: { onStart: () => void }) {
           <li>Không có đáp án đúng hoặc sai, nên hãy trả lời trung thực và nhất quán.</li>
           <li>Bạn chỉ xem được kết quả khi đã hoàn thành đầy đủ toàn bộ câu hỏi.</li>
         </ul>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Thông tin hồ sơ</p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Nhập tên</span>
+              <input
+                value={userName}
+                onChange={(e) => onChangeUserName(e.target.value)}
+                placeholder="Ví dụ: Nguyễn Văn A"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-indigo-200 focus:ring-2"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">Nhập mã hồ sơ</span>
+              <input
+                value={userProfileId}
+                onChange={(e) => onChangeUserProfileId(e.target.value)}
+                placeholder="Ví dụ: HS00123"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-indigo-200 focus:ring-2"
+              />
+            </label>
+          </div>
+          {notice && (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+              {notice}
+            </p>
+          )}
+        </div>
 
         <button
           type="button"
@@ -1260,11 +1313,15 @@ function Result({
   info: { type, nameVi, traits },
   mbtiType,
   answers,
+  userName,
+  userProfileId,
   onRetry,
 }: {
   info: import("./mbti-data").MBTITypeInfo;
   mbtiType: string;
   answers: AnswerRecord;
+  userName: string;
+  userProfileId: string;
   onRetry: () => void;
 }) {
   const dimensionScores = computeMBTIScores(answers);
@@ -1272,6 +1329,10 @@ function Result({
   const [consultationText, setConsultationText] = useState<string | null>(null);
   const [consultationSections, setConsultationSections] = useState<Record<string, SectionValue> | null>(null);
   const [consultationError, setConsultationError] = useState<string | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const autoSaveOnceRef = useRef(false);
 
   useEffect(() => {
     setConsultationLoading(true);
@@ -1330,6 +1391,76 @@ function Result({
       });
   }, [mbtiType]);
 
+  const handleSaveSession = useCallback(async () => {
+    setSaveLoading(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
+    const trimmedName = userName.trim();
+    const trimmedProfile = userProfileId.trim();
+    if (!trimmedName) {
+      setSaveLoading(false);
+      setSaveError("Vui lòng nhập tên.");
+      return;
+    }
+    if (!trimmedProfile) {
+      setSaveLoading(false);
+      setSaveError("Vui lòng nhập mã hồ sơ.");
+      return;
+    }
+
+    const answersPayload = MBTI_QUESTIONS.map((q, idx) => ({
+      question_number: idx + 1,
+      answer_value: answers[q.id],
+    }));
+
+    if (answersPayload.some((a) => typeof a.answer_value !== "number")) {
+      setSaveLoading(false);
+      setSaveError("Thiếu câu trả lời. Vui lòng làm lại bài trắc nghiệm.");
+      return;
+    }
+
+    try {
+      const resp = await fetch(`${API_BASE}/api/mbti/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_name: trimmedName,
+          user_profile_id: trimmedProfile,
+          mbti_result: mbtiType,
+          answers: answersPayload,
+        }),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        let msg = "Lưu kết quả thất bại.";
+        try {
+          const data = text ? JSON.parse(text) : null;
+          msg = data?.error || msg;
+        } catch {
+          // ignore JSON parse error
+        }
+        throw new Error(`${msg} (HTTP ${resp.status})`);
+      }
+
+      await resp.json().catch(() => null);
+      setSaveSuccess("Đã lưu kết quả vào cơ sở dữ liệu.");
+    } catch (e: any) {
+      setSaveError(e?.message || "Lưu kết quả thất bại.");
+    } finally {
+      setSaveLoading(false);
+    }
+  }, [answers, mbtiType, userName, userProfileId]);
+
+  // Auto-save once when arriving at Result (avoid StrictMode double-call)
+  useEffect(() => {
+    if (autoSaveOnceRef.current) return;
+    if (!userName.trim() || !userProfileId.trim()) return;
+    autoSaveOnceRef.current = true;
+    void handleSaveSession();
+  }, [handleSaveSession, userName, userProfileId]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1351,6 +1482,42 @@ function Result({
             </span>
           ))}
         </div>
+      </div>
+
+      {/* Lưu kết quả vào DB */}
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="font-semibold text-slate-800">Lưu kết quả vào hồ sơ</h3>
+        <p className="mt-1 text-sm text-slate-600">
+          Hệ thống sẽ lưu lần làm bài này theo hồ sơ: <strong className="font-semibold text-slate-900">{userName.trim() || "—"}</strong>{" "}
+          (<strong className="font-semibold text-slate-900">{userProfileId.trim() || "—"}</strong>).
+        </p>
+
+        {saveLoading && (
+          <p className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800">
+            Đang lưu kết quả...
+          </p>
+        )}
+        {saveError && (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+            {saveError}
+          </p>
+        )}
+        {saveSuccess && (
+          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+            {saveSuccess}
+          </p>
+        )}
+
+        {saveError && (
+          <button
+            type="button"
+            onClick={handleSaveSession}
+            disabled={saveLoading}
+            className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-white sm:w-auto"
+          >
+            {saveLoading ? "Đang lưu..." : "Thử lưu lại"}
+          </button>
+        )}
       </div>
 
       {/* Octagon Diagram */}

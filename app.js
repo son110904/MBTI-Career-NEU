@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import * as Minio from "minio";
 import mammoth from "mammoth";
 import OpenAI from "openai";
+import pool from "./src/db.js";
 
 dotenv.config();
 
@@ -19,6 +20,28 @@ const MBTI_TYPES = [
   "ISTJ", "ISFJ", "ESTJ", "ESFJ",
   "ISTP", "ISFP", "ESTP", "ESFP",
 ];
+
+function isValidMbtiCode(code) {
+  return typeof code === "string" && MBTI_TYPES.includes(code.trim().toUpperCase());
+}
+
+function isValidAnswerValue(v) {
+  return Number.isInteger(v) && v >= 1 && v <= 7;
+}
+
+function normalizeAnswersInput(answers) {
+  if (!Array.isArray(answers)) return null;
+  const normalized = [];
+  for (const item of answers) {
+    const question_number = Number(item?.question_number);
+    const answer_value = Number(item?.answer_value);
+    if (!Number.isInteger(question_number) || question_number < 1) return null;
+    if (!isValidAnswerValue(answer_value)) return null;
+    normalized.push({ question_number, answer_value });
+  }
+  if (normalized.length === 0) return null;
+  return normalized;
+}
 
 
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || "203.113.132.48";
@@ -838,6 +861,65 @@ app.get("/api/ai-consultation", async (req, res) => {
       error: "Loi khi tai tu van tu tai lieu.",
       detail: err.message,
     });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MBTI logging to PostgreSQL
+// Tables:
+//   - mbti_types
+//   - mbti_sessions
+//   - mbti_answers
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post("/api/mbti/sessions", async (req, res) => {
+  const user_name = typeof req.body?.user_name === "string" ? req.body.user_name.trim() : "";
+  const user_profile_id = typeof req.body?.user_profile_id === "string" ? req.body.user_profile_id.trim() : "";
+  const mbti_result_raw = req.body?.mbti_result;
+  const mbti_result = typeof mbti_result_raw === "string" ? mbti_result_raw.trim().toUpperCase() : "";
+  const answers = normalizeAnswersInput(req.body?.answers);
+
+  if (!user_name) return res.status(400).json({ error: "user_name bat buoc" });
+  if (!user_profile_id) return res.status(400).json({ error: "user_profile_id bat buoc" });
+  if (!isValidMbtiCode(mbti_result)) return res.status(400).json({ error: "mbti_result khong hop le" });
+  if (!answers) return res.status(400).json({ error: "answers khong hop le" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const sessionIns = await client.query(
+      `INSERT INTO mbti_sessions (user_name, user_profile_id, mbti_result)
+       VALUES ($1, $2, $3)
+       RETURNING id, user_name, user_profile_id, mbti_result, created_at`,
+      [user_name, user_profile_id, mbti_result],
+    );
+    const session = sessionIns.rows[0];
+
+    // Batch insert answers
+    const values = [];
+    const params = [];
+    let p = 1;
+    for (const a of answers) {
+      // (session_id, question_number, answer_value)
+      values.push(`($${p++}, $${p++}, $${p++})`);
+      params.push(session.id, a.question_number, a.answer_value);
+    }
+
+    await client.query(
+      `INSERT INTO mbti_answers (session_id, question_number, answer_value)
+       VALUES ${values.join(", ")}`,
+      params,
+    );
+
+    await client.query("COMMIT");
+    return res.status(201).json({ session, answers_saved: answers.length });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("[MBTI] save session error:", err?.message || err);
+    return res.status(500).json({ error: "Loi luu ket qua MBTI" });
+  } finally {
+    client.release();
   }
 });
 
