@@ -598,11 +598,13 @@ function parseNameAndCode(input) {
   const s = String(input || "").trim();
   if (!s) return { name: "", code: null };
 
-  const m = s.match(/^(.*?)(?:\s*\((\d{3,})\)\s*)$/u);
+  // Match codes like: (7340401) or (7340201_EP10) or (7340201_POHE7) or (7340201_TT1)
+  const m = s.match(/^(.*?)(?:\s*\((\d{6,}(?:_[A-Za-z0-9]+)*)\)\s*)$/u);
   if (m) {
     const name = (m[1] || "").trim();
     const code = (m[2] || "").trim() || null;
-    return { name: name || s, code };
+    // IMPORTANT: don't force name to s when name is empty (e.g. "(7380101)")
+    return { name, code };
   }
   return { name: s, code: null };
 }
@@ -617,27 +619,25 @@ function stripKnownPrefixes(line) {
   const raw = String(line || "").trim();
   if (!raw) return raw;
 
-  const lower = raw
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
+  // Safer, regex-based stripping:
+  // - Only remove *exact* leading labels; never remove arbitrary extra tokens.
+  // - Keep original text casing/diacritics in the remainder.
+  return raw
+    // Group headers
+    .replace(/^(?:##\s*)?(?:Lĩnh\s*vực|Nhóm\s*ngành|Khối\s*ngành|Nhóm\s*lĩnh\s*vực)\s*:\s*/iu, "")
+    .replace(/^(?:Lĩnh\s*vực|Nhóm\s*ngành|Khối\s*ngành|Nhóm\s*lĩnh\s*vực)\s+/iu, "")
+    // Major headers
+    .replace(/^(?:###\s*)?(?:Ngành|Chuyên\s*ngành)\s*:\s*/iu, "")
+    .replace(/^(?:Ngành|Chuyên\s*ngành)\s+/iu, "")
     .trim();
+}
 
-  const prefixes = [
-    "linh vuc",
-    "nhom nganh",
-    "khoi nganh",
-    "nganh",
-  ];
-
-  for (const p of prefixes) {
-    if (lower.startsWith(p)) {
-      const idx = raw.indexOf(":");
-      if (idx !== -1) return raw.slice(idx + 1).trim();
-      return raw.split(/\s+/).slice(2).join(" ").trim() || raw;
-    }
-  }
-  return raw;
+function stripNgheNghiepPrefix(text) {
+  // Remove leading "Nghề nghiệp:" / "Nghề nghiệp tương ứng:" from a jobs string
+  return String(text || "")
+    .trim()
+    .replace(/^\s*Ngh[eề]\s+nghi[eệ]p(?:\s+t[uư][oơ]ng\s+[uứ]ng)?\s*:\s*/iu, "")
+    .trim();
 }
 
 function canonicalizeNganhNgheFromString(text) {
@@ -691,8 +691,10 @@ function canonicalizeNganhNgheFromString(text) {
   };
 
   const addJob = (jobLine) => {
-    const job = String(jobLine || "").trim();
+    let job = String(jobLine || "").trim();
     if (!job || !currentMajor) return;
+    // Drop stray label lines that sometimes appear without actual jobs
+    if (/^Ngh[eề]\s+nghi[eệ]p(?:\s+t[uư][oơ]ng\s+[uứ]ng)?$/iu.test(job)) return;
     currentMajor.jobs.push(job);
   };
 
@@ -712,9 +714,11 @@ function canonicalizeNganhNgheFromString(text) {
     }
 
     if (line.includes(":")) {
-      const [lhs, rhs] = line.split(":");
+      const idx = line.indexOf(":");
+      const lhs = idx === -1 ? line : line.slice(0, idx);
+      const rhs = idx === -1 ? "" : line.slice(idx + 1);
       const left = (lhs || "").trim();
-      const right = (rhs || "").trim();
+      const right = stripNgheNghiepPrefix((rhs || "").trim());
 
       const leftNoDia = left
         .normalize("NFD")
@@ -733,6 +737,7 @@ function canonicalizeNganhNgheFromString(text) {
           .split(",")
           .map((j) => j.trim())
           .filter(Boolean)
+          .filter((j) => !/^Ngh[eề]\s+nghi[eệ]p(?:\s+t[uư][oơ]ng\s+[uứ]ng)?$/iu.test(j))
           .forEach(addJob);
       }
       continue;
@@ -740,8 +745,10 @@ function canonicalizeNganhNgheFromString(text) {
 
     const cleaned = stripKnownPrefixes(stripMarkdownHeading(line));
     const { name, code } = parseNameAndCode(cleaned);
-    if (code || !currentGroup) ensureGroup(`${name}${code ? ` (${code})` : ""}`);
-    else ensureMajor(name);
+    // Heuristic: if we have a group already, a coded line is more likely a major than a group.
+    if (code && currentGroup) ensureMajor(cleaned);
+    else if (code || !currentGroup) ensureGroup(`${name || cleaned}${code ? ` (${code})` : ""}`);
+    else ensureMajor(name || cleaned);
   }
 
   for (const g of items) {
