@@ -1444,7 +1444,19 @@ function Result({
         throw new Error(`${msg} (HTTP ${resp.status})`);
       }
 
-      await resp.json().catch(() => null);
+      const payload = await resp.json().catch(() => null);
+      const sessionId = payload?.session?.id;
+
+      // Best-effort: persist AI consultation snapshot tied to this session id.
+      // Backend will do AI/heuristic selection + canonicalization + DB insert.
+      if (sessionId) {
+        fetch(
+          `${API_BASE}/api/ai-consultation?mbtiType=${encodeURIComponent(mbtiType)}&sessionId=${encodeURIComponent(
+            String(sessionId),
+          )}`,
+        ).catch(() => {});
+      }
+
       setSaveSuccess("Đã lưu kết quả vào cơ sở dữ liệu.");
     } catch (e: any) {
       setSaveError(e?.message || "Lưu kết quả thất bại.");

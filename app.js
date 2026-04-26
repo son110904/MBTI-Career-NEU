@@ -580,6 +580,209 @@ function cleanNganhNghe(text) {
   return output.join("\n").trim();
 }
 
+function uniqStrings(arr) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of arr || []) {
+    const s = typeof raw === "string" ? raw.trim() : "";
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
+function parseNameAndCode(input) {
+  const s = String(input || "").trim();
+  if (!s) return { name: "", code: null };
+
+  const m = s.match(/^(.*?)(?:\s*\((\d{3,})\)\s*)$/u);
+  if (m) {
+    const name = (m[1] || "").trim();
+    const code = (m[2] || "").trim() || null;
+    return { name: name || s, code };
+  }
+  return { name: s, code: null };
+}
+
+function stripMarkdownHeading(line) {
+  return String(line || "")
+    .replace(/^\s*#{1,6}\s*/u, "")
+    .trim();
+}
+
+function stripKnownPrefixes(line) {
+  const raw = String(line || "").trim();
+  if (!raw) return raw;
+
+  const lower = raw
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+
+  const prefixes = [
+    "linh vuc",
+    "nhom nganh",
+    "khoi nganh",
+    "nganh",
+  ];
+
+  for (const p of prefixes) {
+    if (lower.startsWith(p)) {
+      const idx = raw.indexOf(":");
+      if (idx !== -1) return raw.slice(idx + 1).trim();
+      return raw.split(/\s+/).slice(2).join(" ").trim() || raw;
+    }
+  }
+  return raw;
+}
+
+function canonicalizeNganhNgheFromString(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+
+  const lines = raw
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const items = [];
+  let currentGroup = null;
+  let currentMajor = null;
+
+  const ensureGroup = (groupLine) => {
+    const cleaned = stripKnownPrefixes(stripMarkdownHeading(groupLine));
+    const { name, code } = parseNameAndCode(cleaned);
+    const groupName = name || cleaned || "Khác";
+
+    const shouldStartNew =
+      !currentGroup ||
+      (code && currentGroup.group.code !== code) ||
+      (!code && currentGroup.group.name.toLowerCase() !== groupName.toLowerCase());
+
+    if (shouldStartNew) {
+      currentGroup = { group: { code: code || null, name: groupName }, majors: [] };
+      items.push(currentGroup);
+      currentMajor = null;
+    }
+  };
+
+  const ensureMajor = (majorLine) => {
+    if (!currentGroup) ensureGroup("Khác");
+    const cleaned = stripKnownPrefixes(stripMarkdownHeading(majorLine));
+    const { name, code } = parseNameAndCode(cleaned);
+    const majorName = name || cleaned;
+    if (!majorName) return;
+
+    const majors = currentGroup.majors;
+    const existing = majors.find(
+      (m) => m.name.toLowerCase() === majorName.toLowerCase() && String(m.code || "") === String(code || ""),
+    );
+    if (existing) {
+      currentMajor = existing;
+      return;
+    }
+    currentMajor = { code: code || null, name: majorName, jobs: [] };
+    majors.push(currentMajor);
+  };
+
+  const addJob = (jobLine) => {
+    const job = String(jobLine || "").trim();
+    if (!job || !currentMajor) return;
+    currentMajor.jobs.push(job);
+  };
+
+  for (const line of lines) {
+    const md = line.match(/^(#{2,3})\s*(.+)$/u);
+    if (md) {
+      const level = md[1].length;
+      const title = md[2] || "";
+      if (level === 2) ensureGroup(title);
+      else ensureMajor(title);
+      continue;
+    }
+
+    if (/^\s*[-•]\s+/u.test(line)) {
+      addJob(line.replace(/^\s*[-•]\s+/u, "").trim());
+      continue;
+    }
+
+    if (line.includes(":")) {
+      const [lhs, rhs] = line.split(":");
+      const left = (lhs || "").trim();
+      const right = (rhs || "").trim();
+
+      const leftNoDia = left
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase()
+        .trim();
+
+      if (leftNoDia.startsWith("linh vuc") || leftNoDia.startsWith("nhom nganh") || leftNoDia.startsWith("khoi nganh")) {
+        ensureGroup(`${left}: ${right}`);
+        continue;
+      }
+
+      ensureMajor(left);
+      if (right) {
+        right
+          .split(",")
+          .map((j) => j.trim())
+          .filter(Boolean)
+          .forEach(addJob);
+      }
+      continue;
+    }
+
+    const cleaned = stripKnownPrefixes(stripMarkdownHeading(line));
+    const { name, code } = parseNameAndCode(cleaned);
+    if (code || !currentGroup) ensureGroup(`${name}${code ? ` (${code})` : ""}`);
+    else ensureMajor(name);
+  }
+
+  for (const g of items) {
+    for (const m of g.majors) {
+      m.jobs = uniqStrings(m.jobs);
+    }
+    g.majors = g.majors.filter((m) => m.name && m.jobs.length > 0);
+  }
+
+  const pruned = items.filter((g) => g.group?.name && g.majors?.length);
+  if (!pruned.length) return null;
+
+  const group_codes = uniqStrings(pruned.map((g) => g.group.code).filter(Boolean));
+  const major_codes = uniqStrings(pruned.flatMap((g) => g.majors.map((m) => m.code)).filter(Boolean));
+  const major_names = uniqStrings(pruned.flatMap((g) => g.majors.map((m) => m.name)).filter(Boolean));
+  const job_titles = uniqStrings(pruned.flatMap((g) => g.majors.flatMap((m) => m.jobs)));
+
+  return {
+    version: 1,
+    items: pruned,
+    index: { group_codes, major_codes, major_names, job_titles },
+  };
+}
+
+function buildSectionsForStorage(sections, sections_source) {
+  const out = sections && typeof sections === "object" ? { ...sections } : {};
+  const rawNganhNghe = typeof out.nganh_nghe_tuong_ung === "string" ? out.nganh_nghe_tuong_ung : "";
+  const canonical = canonicalizeNganhNgheFromString(rawNganhNghe);
+
+  out.raw = { nganh_nghe_tuong_ung: rawNganhNghe || "" };
+  out.canonical = {
+    ...(out.canonical && typeof out.canonical === "object" ? out.canonical : {}),
+    nganh_nghe: canonical,
+  };
+  out.meta = {
+    sections_source: sections_source || "none",
+    canonical_ok: Boolean(canonical),
+  };
+  return out;
+}
+
 function normalizeSections(sections, mbtiType) {
   if (!sections || typeof sections !== "object") return null;
   const normalized = {};
@@ -812,6 +1015,8 @@ app.get("/api/ai-consultation", async (req, res) => {
     if (!MBTI_TYPES.includes(mbtiType)) {
       return res.status(400).json({ error: "mbtiType khong hop le. Can mot trong 16 loai MBTI." });
     }
+    const sessionIdRaw = req.query.sessionId ?? req.query.session_id ?? "";
+    const sessionId = sessionIdRaw !== "" ? Number(sessionIdRaw) : null;
 
     let personalityData = "";
     let objectNameUsed = "";
@@ -847,13 +1052,40 @@ app.get("/api/ai-consultation", async (req, res) => {
     const useAI = provider !== "none" && useAIParam !== "false";
     const aiSections = useAI ? await extractSectionsWithAI(text, mbtiType, provider) : null;
     const sections = aiSections || heuristicSections;
+    const sections_source = aiSections ? `ai:${provider}` : heuristicSections ? "heuristic" : "none";
+    const sections_for_storage = buildSectionsForStorage(sections, sections_source);
+
+    let persisted = null;
+    if (Number.isFinite(sessionId) && sessionId > 0) {
+      try {
+        const ins = await pool.query(
+          `INSERT INTO ai_consultations (session_id, mbti_result, provider, consultation, sections, object_name)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+           RETURNING id, created_at`,
+          [
+            sessionId,
+            mbtiType,
+            sections_source,
+            text,
+            JSON.stringify(sections_for_storage),
+            objectNameUsed || null,
+          ],
+        );
+        persisted = ins.rows?.[0] || null;
+      } catch (dbErr) {
+        console.error("[ai_consultations] insert error:", dbErr?.message || dbErr);
+        persisted = { error: "insert_failed", detail: dbErr?.message || String(dbErr) };
+      }
+    }
 
     return res.json({
       mbtiType,
       consultation: text,
       sections,
-      sections_source: aiSections ? `ai:${provider}` : heuristicSections ? "heuristic" : "none",
+      sections_source,
+      sections_for_storage,
       objectName: objectNameUsed,
+      persisted,
     });
   } catch (err) {
     console.error("[Consultation] Loi:", err.message);
